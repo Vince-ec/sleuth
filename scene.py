@@ -241,7 +241,7 @@ class Galaxy(object):
         self.sz = sz
         self.order = order
         self.pad = field.pad
-        
+        self.field = field
         # catalog information
         source = field.cat.query(f"id == {gid}")
 
@@ -254,7 +254,7 @@ class Galaxy(object):
         self.beams = {}
 
 
-    def extract(self, field):
+    def extract(self,):
         """
         Extract all beams for this object.
 
@@ -265,27 +265,27 @@ class Galaxy(object):
         # -------------------------
         # NG image cutouts
         # -------------------------
-        if field.ngimg_dir != None:
+        if self.field.ngimg_dir != None:
             self.images = {}
-            for filt in field.NGimages:
+            for filt in self.field.NGimages:
                 self.images[filt] = {}
 
-                (img,nwcs,x,y) = self.cutout_img(field.NGimages[filt]['wcs'],field.NGimages[filt]['image'])
+                (img,nwcs,x,y) = self.cutout_img(self.field.NGimages[filt]['wcs'],self.field.NGimages[filt]['image'])
         
                 self.images[filt]["sci"] = img
                 self.images[filt]["wcs"] = nwcs
-                self.images[filt]["pivot"] = field.NGimages[filt]['pivot']
+                self.images[filt]["pivot"] = self.field.NGimages[filt]['pivot']
         
                 self.images[filt]["x"] = x
                 self.images[filt]["y"] = y
         
-                self.images[filt]["npx"] = x - field.pad
-                self.images[filt]["npy"] = y - field.pad
+                self.images[filt]["npx"] = x - self.pad
+                self.images[filt]["npy"] = y - self.pad
 
-        NGwcs = copy.deepcopy(field.NGimages['F200W']['wcs'])
+        NGwcs = copy.deepcopy(self.field.NGimages['F200W']['wcs'])
         NGwcs.pscale = 1
         
-        for exp in field.exposures:
+        for exp in self.field.exposures:
             # skip exposures where object is not observed
             if not self.in_image(exp["dwcs"], exp["direct"]):
                 print(
@@ -306,7 +306,7 @@ class Galaxy(object):
             fraction = mask.mean()
             
             if fraction < 0.9:            
-                img = blot_direct_image(field.NGimages[exp['pupil']]['image'], NGwcs, dwcs)
+                img = blot_direct_image(self.field.NGimages[exp['pupil']]['image'], NGwcs, dwcs)
            
             beam.direct["sci"] = img
             beam.direct["err"] = err
@@ -316,8 +316,8 @@ class Galaxy(object):
             beam.direct["x"] = x
             beam.direct["y"] = y
 
-            beam.direct["npx"] = x - field.pad
-            beam.direct["npy"] = y - field.pad
+            beam.direct["npx"] = x - self.pad
+            beam.direct["npy"] = y - self.pad
 
             
             # -------------------------
@@ -329,15 +329,15 @@ class Galaxy(object):
             beam.meta["dfile"] = exp["dfile"]
             
             key = (exp['filter'], exp['pupil'])
-            beam.meta["trace"] = field.trace[key]
+            beam.meta["trace"] = self.field.trace[key]
             
             key = (exp['filter'], exp['pupil'], self.order)
-            beam.meta["sens"] = field.sensitivity[key]
+            beam.meta["sens"] = self.field.sensitivity[key]
 
             # -------------------------
             # Find spectral cutout limits
             # -------------------------
-            limits = self.get_beam_limits(x,y,field.trace[(exp["filter"],exp["pupil"])],
+            limits = self.get_beam_limits(x,y,self.field.trace[(exp["filter"],exp["pupil"])],
                 self.sz,exp["filter"][-1], self.order)
 
             beam.cutout_limits = limits

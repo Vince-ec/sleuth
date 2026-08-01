@@ -563,6 +563,28 @@ class Sleuth(object):
         return out[l[0] - self.obj.pad: l[1] - self.obj.pad, l[2] - self.obj.pad:l[3] - self.obj.pad]
 
 
+    def standard_config(self, snr_limit):
+        #load images
+        self.clean_directs()
+        self.load_images('reference')
+        
+        #initialize spectra
+        self.single_seg()
+        self.reseg()
+        self.prepare_foward_model()
+        self.gen_mask()
+        self.build_flats()
+        
+        #color segment
+        self.prepare_segmentation()
+        self.reset_seg()
+        self.reseg()
+        self.segment(limit = snr_limit)
+        self.reseg()
+        
+        #get phot
+        self.extract_phot()
+    
     def extract_phot(self):
         self.phot = build_photometry([self.images[filt]['img'] for filt in self.images],self.Nseg,self.seg_ids,
                        [filt for filt in self.images],self.Bkgseg)
