@@ -91,6 +91,8 @@ class Field(object):
             )[0]
 
             ddat = fits.open(dfile)
+            
+            mx_edge = np.array(np.shape(gdat[2].data)) + pad
 
             exposure = {
                 "gfile": gfile,
@@ -112,8 +114,11 @@ class Field(object):
                 "dwcs": wcs.WCS(ddat[1].header),
                 
                 "gheader": gdat[1].header,
-                "dheader": ddat[1].header,}
-
+                "dheader": ddat[1].header,
+                
+                "valid_region" : np.array([pad, mx_edge[0], pad, mx_edge[1]])}
+        
+                
             # print("before")
             # print(exposure['dwcs']._naxis)
             # print(exposure['dwcs'].pixel_shape)
@@ -341,7 +346,18 @@ class Galaxy(object):
                 self.sz,exp["filter"][-1], self.order)
 
             beam.cutout_limits = limits
+            
+            if (limits[0] > exp["valid_region"][1]) or (limits[1] < exp["valid_region"][0]) or (limits[2] > exp["valid_region"][3]) or (limits[3] < exp["valid_region"][2]):
+                beam.validity = 'invalid'
 
+            elif (limits[0] > exp["valid_region"][0]) and (limits[1] < exp["valid_region"][1]) and (limits[2] > exp["valid_region"][2]) and (limits[3] < exp["valid_region"][3]):
+                beam.validity = 'valid'
+
+            else:
+                beam.validity = 'partial'
+
+            beam.valid_region = exp["valid_region"]
+                
             # -------------------------
             # Spectral cutout
             # -------------------------
@@ -350,7 +366,7 @@ class Galaxy(object):
             beam.spec["sci"] = spec
             beam.spec["err"] = err
             beam.spec["wcs"] = swcs
-
+            
             # -------------------------
             # Spectral prep
             # -------------------------

@@ -475,14 +475,28 @@ class Sleuth(object):
             for beam in self.obj.beams[pupil]:
                 # -----------------------------------
                 # Generate morphological trace mask
-                # -----------------------------------                
-                mdl = self.forward_model(beam, beam.direct['sci'] * (beam.direct['seg'] > 0),
+                # -----------------------------------   
+
+                if beam.validity == 'valid':
+                    mdl = self.forward_model(beam, beam.direct['sci'] * (beam.direct['seg'] > 0),
                                               [np.linspace(5000, 30000), np.ones(50)])
-    
-                mdl /= np.nanmax(mdl)
+                    mdl /= np.nanmax(mdl)
+                    beam.spec["trace_mask"] = (mdl > self.msk_min)                
 
-                beam.spec["trace_mask"] = (mdl > self.msk_min)                
+                elif beam.validity == 'partial':
+                    mdl = self.forward_model(beam, beam.direct['sci'] * (beam.direct['seg'] > 0),
+                                              [np.linspace(5000, 30000), np.ones(50)])
+                    if np.sum(mdl) == 0:
+                        beam.spec["trace_mask"] = np.zeros_like(beam.spec['sci']) == 1
+                    else:
+                        mdl /= np.nanmax(mdl)
+                        beam.spec["trace_mask"] = (mdl > self.msk_min)                
 
+                
+                elif beam.validity == 'invalid':
+                    beam.spec["trace_mask"] = np.zeros_like(beam.spec['sci']) == 1
+                    
+                
                 # -----------------------------------
                 # Detector validity mask
                 # -----------------------------------
@@ -555,14 +569,42 @@ class Sleuth(object):
 
     def forward_model(self,beam, galaxy_image, spectra):   
         l = beam.cutout_limits
+
         inimg = jnp.zeros([l[1] - self.obj.pad, l[3] - self.obj.pad])
-        
+
         out = disperse_obj_cached(galaxy_image * (beam.direct['seg']>0), beam.spec['disp'],  beam.spec['sens'],
                           beam.spec['lam'], spectra, inimg)
 
-        return out[l[0] - self.obj.pad: l[1] - self.obj.pad, l[2] - self.obj.pad:l[3] - self.obj.pad]
+        ymin = np.max([l[0] - self.obj.pad,0])
+        ymax = l[1] - self.obj.pad
+        xmin = np.max([l[2] - self.obj.pad,0])
+        xmax = l[3] - self.obj.pad
+                
+        out_=  out[ymin:ymax, xmin:xmax]
 
+        if beam.validity == 'valid':
+            return out_
 
+        elif beam.validity == 'partial':
+            loss = np.zeros_like(beam.valid_region )
+            
+            for i in range(2):
+                if l[2*i]  < beam.valid_region [2*i]:
+                    loss[2*i] = l[2*i] - beam.valid_region [2*i]
+            
+                if l[2*i + 1]  > beam.valid_region [2*i + 1]:
+                    loss[2*i + 1] = l[2*i] - beam.valid_region [2*i + 1]
+                    
+            
+            
+            out_filled = np.zeros_like(beam.spec['sci'])
+            out_filled[0 - loss[0] :(l[1] - l[0]) - loss[1], 0 - loss[2]:(l[3] - l[2]) - loss[3]] = out_
+
+            return out_filled
+
+        else:
+            print('beam invalid')
+    
     def standard_config(self, snr_limit):
         #load images
         self.clean_directs()
