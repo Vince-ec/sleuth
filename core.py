@@ -607,7 +607,7 @@ class Sleuth(object):
     
     def standard_config(self, snr_limit):
         #load images
-        self.clean_directs()
+        # self.clean_directs()
         self.load_images('reference')
         
         #initialize spectra

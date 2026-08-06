@@ -145,15 +145,18 @@ class Field(object):
             # Cache sensitivity curves
             # -------------------------
 
-            for order in ["+1", "+0", "+2", "+3", "-1"]:
-
+            for order in ["+1", "0", "+2", "+3", "-1"]:
+                order_ = order 
+                if order == "0":
+                    order_ = "+0"
+                
                 key = (filt, pupil, order)
 
                 if key not in self.sensitivity:
 
                     trns = fits.open(
                         os.path.join(self.cal_dir,
-                            f"NIRISS_NIS_{filt}_{pupil}_{order}_sens_pmap0041.fits"))
+                            f"NIRISS_NIS_{filt}_{pupil}_{order_}_sens_pmap0041.fits"))
 
                     wave = np.asarray(trns[1].data.field(0),dtype=np.float32)
 
