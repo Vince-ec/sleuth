@@ -30,13 +30,29 @@ class Field(object):
     Loads all exposures, calibration information, and the source catalog.
     """
 
-    def __init__(self, data_dir, cal_dir, cat, seg,contam, ngimg_dir=None, pad = 800):
+    def __init__(self, grism_files, ref_files, cal_dir, cat, seg,contam, ngimg_dir=None, pad = 800):
 
-        self.data_dir = data_dir
+        self.grism_files = grism_files
+        self.ref_files = ref_files
         self.cal_dir = cal_dir
         self.pad = pad
         self.ngimg_dir = ngimg_dir
         
+        # -------------------------
+        # File sort
+        # -------------------------
+        
+        self.files_info = {}
+        for f in self.grism_files:
+            dat = fits.open(f)
+            self.files_info[f] = {'instrument': dat[0].header['INSTRUME'],
+                            'filter': dat[0].header['FILTER'],
+                            'pupil': dat[0].header['PUPIL']}
+        
+        self.reffiles_info = {}
+        for f in self.ref_files:
+            dat = fits.open(f)
+            self.reffiles_info[dat[0].header['PUPIL']] = {'instrument': dat[0].header['INSTRUME'], 'filename' : f}
 
         # -------------------------
         # Catalog
@@ -68,75 +84,53 @@ class Field(object):
         # Read all grism exposures
         # -------------------------
 
-        for gfile in sorted(glob(os.path.join(self.data_dir, "*"))):
+        for k, d in self.files_info.items():
 
-            gdat = fits.open(gfile)
-
-            if gdat[0].header["FILTER"] == "CLEAR":
-                continue
+            gdat = fits.open(k)
 
             filt = gdat[0].header["FILTER"]
             pupil = gdat[0].header["PUPIL"]
 
-            # Find associated direct image
-            _, a, b, _, _ = os.path.basename(
-                gdat[1].header["ASTROREF"]
-            ).split("_")
-
-            dfile = glob(
-                os.path.join(
-                    self.data_dir,
-                    f"*_{a}_{b}*_cal.fits"
-                )
-            )[0]
+            dfile = self.reffiles_info[d['pupil']]['filename']
 
             ddat = fits.open(dfile)
             
             mx_edge = np.array(np.shape(gdat[2].data)) + pad
 
+            gwcs = pad_wcs(wcs.WCS(gdat[1].header), pad)
+        
+            dwcs = wcs.WCS(ddat[0].header)
+            dwcs.pscale = 1
+            
+            refimg = blot_direct_image(np.array(ddat[0].data).astype(np.float32), dwcs, gwcs)
+            
             exposure = {
-                "gfile": gfile,
+                "gfile": k,
                 "dfile": dfile,
 
                 "filter": filt,
                 "pupil": pupil,
                 
                 "spec": np.pad(gdat[1].data, pad),
-                "direct": np.pad(ddat[1].data, pad),
+                "direct": refimg,
 
                 "spec_err": np.pad(gdat[2].data, pad),
-                "direct_err": np.pad(ddat[2].data, pad),
+                # "direct_err": np.pad(ddat[2].data, pad),
 
                 "spec_dq": np.pad(gdat[3].data, pad),
-                "direct_dq": np.pad(ddat[3].data, pad),
+                # "direct_dq": np.pad(ddat[3].data, pad),
                 
-                "gwcs": wcs.WCS(gdat[1].header),
-                "dwcs": wcs.WCS(ddat[1].header),
+                "gwcs": gwcs,
+                # "dwcs": wcs.WCS(ddat[1].header),
                 
                 "gheader": gdat[1].header,
-                "dheader": ddat[1].header,
+                "dheader": ddat[0].header,
                 
                 "valid_region" : np.array([pad, mx_edge[0], pad, mx_edge[1]])}
-        
-                
-            # print("before")
-            # print(exposure['dwcs']._naxis)
-            # print(exposure['dwcs'].pixel_shape)
-            # print(exposure['dwcs'].array_shape)
-
-            
-            exposure['gwcs'] = pad_wcs(exposure['gwcs'], pad)
-
-            exposure['dwcs'] = pad_wcs(exposure['dwcs'], pad)
 
             outseg = blot_segmentation(self.in_seg, self.seg_wcs,
-                                       exposure['dwcs'],exposure['direct'].shape,fill_value=0)
+                                       exposure['gwcs'],exposure['direct'].shape,fill_value=0)
                         
-            # print("after")
-            # print(exposure['dwcs']._naxis)
-            # print(exposure['dwcs'].pixel_shape)
-            # print(exposure['dwcs'].array_shape)
-            
             exposure['seg'] = outseg
             
             self.exposures.append(exposure)
