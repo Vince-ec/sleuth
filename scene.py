@@ -30,13 +30,13 @@ class Field(object):
     Loads all exposures, calibration information, and the source catalog.
     """
 
-    def __init__(self, grism_files, ref_files, cal_dir, cat, seg,contam, ngimg_dir=None, pad = 800):
+    def __init__(self, grism_files, ref_files, cal_dir, cat, seg,contam, img_dir=None, pad = 800):
 
         self.grism_files = grism_files
         self.ref_files = ref_files
         self.cal_dir = cal_dir
         self.pad = pad
-        self.ngimg_dir = ngimg_dir
+        self.img_dir = img_dir
         
         # -------------------------
         # File sort
@@ -170,49 +170,55 @@ class Field(object):
                     os.path.join(self.cal_dir,f"NIRISS_{pupil}_{filt}.V5.conf"))
 
         # -------------------------
-        # NIRISS gridded images
+        # Hi-res images
         # -------------------------
-        if self.ngimg_dir != None:
-            ngdict = {'imgs':{}, 'err':{}}
+        self.imgdict = {'imgs':{}, 'err':{}}
+        if self.img_dir != None:
+            self.imgdict['seg'] = {'file': glob(self.img_dir + '*seg*')[0]}
             
-            
-            for f in glob(self.ngimg_dir + 'images/*'):
+            for f in glob(self.img_dir + 'images/*'):
                 dat = fits.open(f)
                 
-                ngdict['imgs'][dat[0].header['FILTER']] = {}
+                if 'FILTER' in dat[0].header:
+                    tag = dat[0].header['FILTER']
+                    if tag == 'CLEAR2L':
+                        tag = 'F606W'                      
+                else:
+                    tag = dat[0].header['FILTER2']
+                    if tag == 'CLEAR2L':
+                        tag = 'F606W'
                 
-                ngdict['imgs'][dat[0].header['FILTER']]['img'] = dat[0].data
-                ngdict['imgs'][dat[0].header['FILTER']]['header'] = dat[0].header
+                self.imgdict['imgs'][tag] = {'file':f}
             
-            for f in glob(self.ngimg_dir + 'whts/*'):
-                dat = fits.open(f)
-                ngdict['err'][dat[0].header['FILTER']] = {}
-                ngdict['err'][dat[0].header['FILTER']]['img'] = 1/np.sqrt(dat[0].data) * dat[0].header['PHOTFLAM']
+            # for f in glob(self.ngimg_dir + 'whts/*'):
+            #     dat = fits.open(f)
+            #     self.imgdict['err'][dat[0].header['FILTER']] = {}
+            #     self.imgdict['err'][dat[0].header['FILTER']]['file'] = f
 
-            self.NGimages = {}
+            # self.NGimages = {}
                 
-            dat = fits.open(glob(os.path.join(self.ngimg_dir, "*"))[0])
+            # # dat = fits.open(glob(os.path.join(self.ngimg_dir, "*"))[0])
 
-            outseg = blot_segmentation(self.in_seg, self.seg_wcs,
-                                       wcs.WCS(dat[0].header),dat[0].data.shape,fill_value=0)
+            # outseg = blot_segmentation(self.in_seg, self.seg_wcs,
+            #                            wcs.WCS(dat[0].header),dat[0].data.shape,fill_value=0)
             
-            # for ngfile in sorted(glob(os.path.join(self.ngimg_dir, "*"))):
-            for k in ngdict['imgs']:
+            # # for ngfile in sorted(glob(os.path.join(self.ngimg_dir, "*"))):
+            # for k in ngdict['imgs']:
 
-                # dat = fits.open(ngfile)
-                mask = binary_dilation(outseg > 0, iterations=5)
-                mask |= ~np.isfinite(ngdict['imgs'][k]['img'] )
-                mask |= (ngdict['imgs'][k]['img']  == 0)
-                _, med, _ = sigma_clipped_stats(ngdict['imgs'][k]['img'] *1e20,mask=mask,sigma=3.0,maxiters=5)
+            #     # dat = fits.open(ngfile)
+            #     mask = binary_dilation(outseg > 0, iterations=5)
+            #     mask |= ~np.isfinite(ngdict['imgs'][k]['img'] )
+            #     mask |= (ngdict['imgs'][k]['img']  == 0)
+            #     _, med, _ = sigma_clipped_stats(ngdict['imgs'][k]['img'] *1e20,mask=mask,sigma=3.0,maxiters=5)
 
-                self.NGimages[dat[0].header['FILTER']] = {}
-                self.NGimages[dat[0].header['FILTER']]['image'] = (ngdict['imgs'][k]['img']  - med*1e-20)
-                self.NGimages[dat[0].header['FILTER']]['err'] = ngdict['err'][k]['img'] 
-                self.NGimages[dat[0].header['FILTER']]['background'] = med
-                self.NGimages[dat[0].header['FILTER']]['pivot'] = ngdict['imgs'][k]['header']['PIVOT']
-                self.NGimages[dat[0].header['FILTER']]['ofile'] = ngdict['imgs'][k]['header']['OFILE']
-                self.NGimages[dat[0].header['FILTER']]['photflam'] = ngdict['imgs'][k]['header']['PHOTFLAM']
-                self.NGimages[dat[0].header['FILTER']]['wcs'] = wcs.WCS(ngdict['imgs'][k]['header'])
+            #     self.NGimages[k] = {}
+            #     self.NGimages[k]['image'] = (ngdict['imgs'][k]['img']  - med*1e-20)
+            #     self.NGimages[k]['err'] = ngdict['err'][k]['img'] 
+            #     self.NGimages[k]['background'] = med
+            #     self.NGimages[k]['pivot'] = ngdict['imgs'][k]['header']['PIVOT']
+            #     self.NGimages[k]['ofile'] = ngdict['imgs'][k]['header']['OFILE']
+            #     self.NGimages[k]['photflam'] = ngdict['imgs'][k]['header']['PHOTFLAM']
+            #     self.NGimages[k]['wcs'] = wcs.WCS(ngdict['imgs'][k]['header'])
             
         # -------------------------
         # Contam Table gen
@@ -263,6 +269,7 @@ class Galaxy(object):
         self.order = order
         self.pad = field.pad
         self.field = field
+        self.imgdict = field.imgdict
         # catalog information
         source = field.cat.query(f"id == {gid}")
 
@@ -286,7 +293,7 @@ class Galaxy(object):
         # -------------------------
         # NG image cutouts
         # -------------------------
-        if self.field.ngimg_dir != None:
+        if self.field.img_dir != None:
             self.images = {}
             for filt in self.field.NGimages:
                 self.images[filt] = {}
