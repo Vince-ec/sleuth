@@ -16,6 +16,8 @@ from .linemaps import build_line_maps
 import jax.numpy as jnp
 import jax
 
+import matplotlib.pyplot as plt
+
 class Sleuth(object):
     def __init__(self, obj, msk_min = 0.1 ):
         self.obj = obj
@@ -27,29 +29,6 @@ class Sleuth(object):
 
         self.Bkgseg = self.ref_beam.direct['seg'] == 0
     
-    def clean_directs(self,):
-        ref_wcs = copy.deepcopy(self.ref_beam.direct['wcs'])
-        ref_wcs.pscale = 1
-
-        for p in self.obj.beams:
-            mini_img = []
-            for bm in self.obj.beams[p]:
-                inwcs = copy.deepcopy(bm.direct['wcs'])
-                inwcs.pscale = 1
-                outimg = blot_direct_image(bm.direct['sci'], inwcs, ref_wcs)
-                mini_img.append(outimg)
-                
-            mini_img = np.array(mini_img, dtype=float)
-            mini_img[mini_img == 0] = np.nan
-            clean_img = np.nanmedian(mini_img, axis = 0).astype(np.float32)
-            clean_img[np.isnan(clean_img)] = 0
-            for bm in self.obj.beams[p]:
-                inwcs = copy.deepcopy(bm.direct['wcs'])
-                inwcs.pscale = 1
-                outimg = blot_direct_image(clean_img, ref_wcs, inwcs)
-                norm = np.max(bm.direct['sci'][bm.direct['seg'] == self.obj.gid]) / np.max(outimg[bm.direct['seg'] == self.obj.gid])
-                bm.direct['sci'] = outimg*norm     
-
     def load_images(self, img_source, drizzle_loss_factor = 356):
         self.images = {}
         self.img_source = img_source
@@ -220,7 +199,7 @@ class Sleuth(object):
         self.Nseg = (self.ref_beam.direct["seg"] == self.obj.gid) * 1
         self.seg_ids = [1]
     
-    def segment(self, method = 'color', limit=100, image = None):
+    def segment(self, method = 'color', limit=100, image = None, downcast = True):
         """
         Runs segmentation method
         for color limit refers to SNR limit; for flux, limit refers to flux limit
@@ -229,7 +208,7 @@ class Sleuth(object):
         if method == "color":
             self.build_features()
         
-            self.color_segment(limit)
+            self.color_segment(limit, downcast = downcast)
         
         elif method == "flux":
             self.build_features(image = image)
@@ -238,7 +217,7 @@ class Sleuth(object):
             
         self.seg_ids = np.unique(self.Nseg)[1:]
 
-    def color_segment(self, snr_limit=100):
+    def color_segment(self, snr_limit=100, downcast = True):
         """
         Segment galaxy into self-similar regions using
         nearest-neighbor color similarity.
@@ -316,10 +295,44 @@ class Sleuth(object):
             pix = coords[region]
     
             Nseg[pix[:,0],pix[:,1]] = i + 1
+
+        if downcast:
+            # Native NIRCam segmentation
+            seg_nircam = Nseg.copy()
+            
+            # Degrade to NIRISS resolution
+            Nseg = blot_segmentation(
+                seg_nircam,
+                self.obj.images['seg_wcs'],
+                self.ref_beam.direct['wcs'],
+                self.ref_beam.direct['sci'].shape)
+            
+            # Identify NIRCam regions represented in NIRISS
+            nircam_ids = np.unique(seg_nircam)
+            nircam_ids = nircam_ids[nircam_ids > 0]
+            
+            surviving = [sid for sid in nircam_ids if np.any(Nseg == sid)]
+            
+            # Reconstruct segmentation at native NIRCam resolution
+            self.nircam_Nseg = np.zeros_like(seg_nircam)
+            
+            for new_id, sid in enumerate(surviving, 1):
+                self.nircam_Nseg[seg_nircam == sid] = sid
+            
+            upsegout = blot_segmentation(Nseg, self.ref_beam.direct['wcs'], self.obj.images['seg_wcs'],  np.shape(seg_nircam))
+            
+            self.nircam_Nseg[self.nircam_Nseg == 0] = upsegout[self.nircam_Nseg == 0]
+            
+            idx = 1
+            for i in np.unique(Nseg)[1:]:
+                Nseg[Nseg == i] = idx
+                self.nircam_Nseg[self.nircam_Nseg == i] = idx
+                idx+=1
+
     
         self.Nseg = Nseg
     
-        self.nregions = len(regions)
+        self.nregions = len(np.unique(Nseg)[1:])   
                 
     def flux_segment(self, image, flux_limit):
     
@@ -396,7 +409,9 @@ class Sleuth(object):
             pix = coords[region]
     
             Nseg[pix[:,0],pix[:,1]] = i + 1
-    
+
+
+        
         self.Nseg = Nseg
     
         self.nregions = len(regions)
@@ -460,14 +475,14 @@ class Sleuth(object):
                 # -----------------------------------
                 # Generate morphological trace mask
                 # -----------------------------------   
-
+                
                 if beam.validity == 'valid':
                     mdl = self.forward_model(beam, beam.direct['sci'] * (beam.direct['seg'] > 0),
                                               [np.linspace(5000, 30000), np.ones(50)])
                     mdl /= np.nanmax(mdl)
-                    beam.spec["trace_mask"] = (mdl > self.msk_min)                
+                    beam.spec["trace_mask"] = mdl > self.msk_min               
 
-                elif beam.validity == 'partial':
+                elif beam.validity == 'partial':                    
                     mdl = self.forward_model(beam, beam.direct['sci'] * (beam.direct['seg'] > 0),
                                               [np.linspace(5000, 30000), np.ones(50)])
                     if np.sum(mdl) == 0:
@@ -476,11 +491,14 @@ class Sleuth(object):
                         mdl /= np.nanmax(mdl)
                         beam.spec["trace_mask"] = (mdl > self.msk_min)                
 
-                
-                elif beam.validity == 'invalid':
+                elif beam.validity == 'invalid':                    
                     beam.spec["trace_mask"] = np.zeros_like(beam.spec['sci']) == 1
+
                     
-                
+                plt.figure()
+                plt.imshow(beam.spec["trace_mask"])
+                plt.colorbar()
+                print(self.msk_min)
                 # -----------------------------------
                 # Detector validity mask
                 # -----------------------------------
@@ -591,7 +609,6 @@ class Sleuth(object):
     
     def standard_config(self, snr_limit):
         #load images
-        # self.clean_directs()
         self.load_images('reference')
         
         #initialize spectra
@@ -612,8 +629,11 @@ class Sleuth(object):
         self.extract_phot()
     
     def extract_phot(self):
-        self.phot = build_photometry([self.images[filt]['sci'] for filt in self.images],self.obj.images['seg'],self.seg_ids,
-                       [filt for filt in self.images],self.Bkgseg)
+        self.phot = build_photometry([self.images[filt]['sci'] for filt in self.images],
+                                     [self.images[filt]['err'] for filt in self.images],
+                                     self.obj.images['seg'],
+                                     self.seg_ids,
+                                    [filt for filt in self.images])
     
     def Fit_Pupil(self, pupil, temp, z, return_covar=False):
 

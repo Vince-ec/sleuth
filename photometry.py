@@ -241,12 +241,7 @@ def build_filter_lookup(filter_file="FILTER.RES.latest"):
 
     return lookup
 
-def build_photometry(images,
-                     segmap,
-                     seg_ids,
-                     filters,
-                     background_mask,
-                     calib_error=0.05):
+def build_photometry(images, errors, segmap, seg_ids, filters, calib_error=0.05):
 
     # ------------------------------------
     # Build filter list once
@@ -256,9 +251,6 @@ def build_photometry(images,
 
     sleuth_filters = build_filter_lookup()
     
-    # for i, filt in enumerate(ff.filters):
-    #     sleuth_filters[filt.name] = i
-    
     pnums = [sleuth_filters[f]for f in filters]
 
     filt_list = [ff[p] for p in pnums]
@@ -266,7 +258,6 @@ def build_photometry(images,
     flux = {}
     error = {}
 
-    
     for sid in seg_ids:
         flux[sid] = {}
         error[sid] = {}
@@ -275,15 +266,12 @@ def build_photometry(images,
         e = []
 
         mask = (segmap == sid)
-        npix = mask.sum()
 
-        for img in images:
+        for img, err_img in zip(images, errors):
 
             flx = np.sum(img[mask])
 
-            sigma = np.std(img[background_mask])
-
-            err = np.sqrt(npix)*sigma
+            err = np.sqrt(np.sum(err_img[mask])**2)
 
             f.append(max(flx,1e-22))
             e.append(err)
@@ -295,8 +283,6 @@ def build_photometry(images,
 
         e[e<=0] = 1e-23
 
-        # fluxes.append(f)
-        # errors.append(e)
         flux[sid] = f
         error[sid] = e
         
