@@ -14,6 +14,9 @@ import astropy.units as u
 import jax.numpy as jnp
 from scipy.ndimage import binary_dilation
 
+import json, pickle
+import h5py
+
 from astropy.nddata import Cutout2D
 
 from .blot_utils import blot_segmentation, blot_direct_image
@@ -83,7 +86,7 @@ class Field(object):
         # -------------------------
         # Read all grism exposures
         # -------------------------
-
+        
         for k, d in self.files_info.items():
 
             gdat = fits.open(k)
@@ -189,7 +192,22 @@ class Field(object):
                         tag = 'F606W'
                 
                 self.imgdict['imgs'][tag] = {'file':f}
-            
+
+            for f in glob(self.img_dir + 'whts/*'):
+                dat = fits.open(f)
+                
+                if 'FILTER' in dat[0].header:
+                    tag = dat[0].header['FILTER']
+                    if tag == 'CLEAR2L':
+                        tag = 'F606W'                      
+                else:
+                    tag = dat[0].header['FILTER2']
+                    if tag == 'CLEAR2L':
+                        tag = 'F606W'
+                
+                self.imgdict['err'][tag] = {'file':f}
+
+        
             # for f in glob(self.ngimg_dir + 'whts/*'):
             #     dat = fits.open(f)
             #     self.imgdict['err'][dat[0].header['FILTER']] = {}
@@ -251,6 +269,140 @@ class Field(object):
         
             self.contam_table[pupil] = pd.DataFrame(contam_dict)
 
+    def save_field(self, outdir):
+        os.makedirs(outdir, exist_ok=True)
+    
+        # ── 1. Exposures (arrays + WCS) ─────────────────────────────────────
+        array_keys = ["spec", "direct", "spec_err", "spec_dq", "seg"]
+        meta_keys  = ["gfile", "dfile", "filter", "pupil", "valid_region",
+                      "gheader", "dheader"]
+    
+        with h5py.File(os.path.join(outdir, "exposures.h5"), "w") as h5:
+            for i, exp in enumerate(self.exposures):
+                grp = h5.create_group(f"exp_{i:04d}")
+                for k in array_keys:
+                    if k in exp:
+                        grp.create_dataset(k, data=exp[k], compression="gzip")
+    
+        # WCS and headers need pickle (FITS headers are not plain dicts)
+        exp_meta = []
+        exp_wcs  = []
+        for i, exp in enumerate(self.exposures):
+            meta = {k: exp[k] for k in ["gfile","dfile","filter","pupil"]}
+            meta["valid_region"] = exp["valid_region"].tolist()
+            exp_meta.append(meta)
+            exp_wcs.append(exp["gwcs"])    # WCS object → pickle
+    
+        with open(os.path.join(outdir, "exp_meta.json"), "w") as f:
+            json.dump(exp_meta, f, indent=2)
+    
+        with open(os.path.join(outdir, "exp_wcs.pkl"), "wb") as f:
+            pickle.dump(exp_wcs, f)
+    
+        # ── 2. Catalogs ──────────────────────────────────────────────────────
+        self.cat.to_parquet(os.path.join(outdir, "cat.parquet"))
+    
+        # ── 3. Contam tables ─────────────────────────────────────────────────
+        for pupil, df in self.contam_table.items():
+            df.to_parquet(os.path.join(outdir, f"contam_{pupil}.parquet"))
+    
+        # ── 4. Sensitivity curves ────────────────────────────────────────────
+        sens_serializable = {
+            f"{filt}__{pupil}__{order}": {"wave": wave.tolist(), "sens": sens.tolist()}
+            for (filt, pupil, order), (wave, sens) in self.sensitivity.items()
+        }
+        with open(os.path.join(outdir, "sensitivity.json"), "w") as f:
+            json.dump(sens_serializable, f)
+    
+        # ── 5. Trace objects ─────────────────────────────────────────────────
+        # GrismTrace objects are not JSON-safe; pickle is safest
+        trace_serializable = {f"{filt}__{pupil}": obj
+                              for (filt, pupil), obj in self.trace.items()}
+        with open(os.path.join(outdir, "trace.pkl"), "wb") as f:
+            pickle.dump(trace_serializable, f)
+    
+        # ── 6. Top-level metadata ─────────────────────────────────────────────
+        top_meta = {
+            "pad":          self.pad,
+            "grism_files":  self.grism_files,
+            "ref_files":    self.ref_files,
+            "cal_dir":      self.cal_dir,
+            "img_dir":      self.img_dir,
+            "files_info":   self.files_info,
+            "reffiles_info": self.reffiles_info,
+        }
+        with open(os.path.join(outdir, "meta.json"), "w") as f:
+            json.dump(top_meta, f, indent=2)
+        
+        # ── 7. save out images ───────────────────────────────────────────────
+        with open(os.path.join(outdir, "imgdict.json"), "w") as f:
+            json.dump(self.imgdict, f, indent=2)
+        
+        print(f"Saved to {outdir}/")
+
+def load_field(outdir):
+    field = Field.__new__(Field)   # skip __init__
+
+    # ── metadata ──────────────────────────────────────────────────────────
+    with open(os.path.join(outdir, "meta.json")) as f:
+        meta = json.load(f)
+    field.__dict__.update(meta)
+
+    # ── catalogs ──────────────────────────────────────────────────────────
+    field.cat = pd.read_parquet(os.path.join(outdir, "cat.parquet"))
+
+    contam_files = glob(os.path.join(outdir, "contam_*.parquet"))
+    field.contam_table = {
+        os.path.basename(p).removeprefix("contam_").removesuffix(".parquet"):
+        pd.read_parquet(p)
+        for p in contam_files
+    }
+
+    # ── sensitivity ────────────────────────────────────────────────────────
+    with open(os.path.join(outdir, "sensitivity.json")) as f:
+        raw = json.load(f)
+    field.sensitivity = {
+        tuple(k.split("__")): (np.array(v["wave"]), np.array(v["sens"]))
+        for k, v in raw.items()
+    }
+
+    # ── trace ──────────────────────────────────────────────────────────────
+    with open(os.path.join(outdir, "trace.pkl"), "rb") as f:
+        trace_raw = pickle.load(f)
+    field.trace = {tuple(k.split("__")): v for k, v in trace_raw.items()}
+
+    # ── WCS ────────────────────────────────────────────────────────────────
+    with open(os.path.join(outdir, "exp_wcs.pkl"), "rb") as f:
+        exp_wcs = pickle.load(f)
+
+    with open(os.path.join(outdir, "exp_meta.json")) as f:
+        exp_meta = json.load(f)
+
+    # ── exposures (arrays) ─────────────────────────────────────────────────
+    array_keys = ["spec", "direct", "spec_err", "spec_dq", "seg"]
+    field.exposures = []
+    with h5py.File(os.path.join(outdir, "exposures.h5"), "r") as h5:
+        for i, (meta_i, gwcs_i) in enumerate(zip(exp_meta, exp_wcs)):
+            exp = dict(meta_i)
+            exp["valid_region"] = np.array(meta_i["valid_region"])
+            exp["gwcs"] = gwcs_i
+            grp = h5[f"exp_{i:04d}"]
+            for k in array_keys:
+                if k in grp:
+                    exp[k] = grp[k][:]
+            field.exposures.append(exp)
+    # ── images ─────────────────────────────────────────────────
+
+    with open(os.path.join(outdir, "imgdict.json")) as f:
+        field.imgdict = json.load(f)
+    
+    # ── segmentation (stored per-exposure; top-level seg/wcs if needed) ────
+    # in_seg and seg_wcs can be reloaded from original seg file if needed
+    # or stored similarly; skipped here unless you need them post-load
+
+    return field
+
+    
 class Beam(object):
 
     def __init__(self):
@@ -293,25 +445,45 @@ class Galaxy(object):
         # -------------------------
         # NG image cutouts
         # -------------------------
-        if self.field.ngimg_dir != None:
+        if self.field.img_dir != None:
+
+            seg = fits.open(self.field.imgdict['seg']['file'])[0].data
+            seg_wcs = wcs.WCS(fits.open(self.field.imgdict['seg']['file'])[0].header)
+            
+            pos = np.where(seg == self.gid )
+            
+            ysize = pos[0].max() - pos[0].min() 
+            xsize = pos[1].max() - pos[1].min() 
+            size = (np.max([ysize,xsize])*1.3)//2
+                                    
             self.images = {}
-            for filt in self.field.NGimages:
+            
+            (img,nwcs,x,y) = self.cutout_img_NC(seg_wcs, seg, size = size)
+            
+            self.images["seg"] = img 
+            self.images["seg_wcs"] = nwcs
+            
+            for filt in self.field.imgdict['imgs']:
                 self.images[filt] = {}
-
-                (img,nwcs,x,y) = self.cutout_img(self.field.NGimages[filt]['wcs'],self.field.NGimages[filt]['image'])
-        
-                self.images[filt]["sci"] = img
+            
+                dat = fits.open(self.field.imgdict['imgs'][filt]['file'])
+                
+                (img,nwcs,x,y) = self.cutout_img_NC(wcs.WCS(dat[0].header), dat[0].data, size = size)
+            
+                self.images[filt]["sci"] = img * dat[0].header['PHOTFLAM']
                 self.images[filt]["wcs"] = nwcs
-                self.images[filt]["pivot"] = self.field.NGimages[filt]['pivot']
-        
-                self.images[filt]["x"] = x
-                self.images[filt]["y"] = y
-        
-                self.images[filt]["npx"] = x - self.pad
-                self.images[filt]["npy"] = y - self.pad
+                self.images[filt]["pivot"] = dat[0].header['PHOTPLAM']
 
-        NGwcs = copy.deepcopy(self.field.NGimages['F200W']['wcs'])
-        NGwcs.pscale = 1
+                dat = fits.open(self.field.imgdict['err'][filt]['file'])
+                
+                (img,nwcs,x,y) = self.cutout_img_NC(wcs.WCS(dat[0].header), dat[0].data, size = size)
+            
+                self.images[filt]["err"] = 1/np.sqrt(img) * dat[0].header['PHOTFLAM']
+
+
+                
+        # NGwcs = copy.deepcopy(self.field.NGimages['F200W']['wcs'])
+        # NGwcs.pscale = 1
         
         for exp in self.field.exposures:
             # skip exposures where object is not observed
@@ -328,7 +500,8 @@ class Galaxy(object):
             # Direct cutout
             # -------------------------
             # (img,err,seg,dwcs,x,y) = self.cutout_dir(exp["gwcs"],exp["direct"],exp["direct_err"],exp["seg"])
-            (img,seg,dwcs,x,y) = self.cutout_dir(exp["gwcs"],exp["direct"],exp["seg"])
+            (img,dwcs,x,y) = self.cutout_img(exp["gwcs"],exp["direct"])
+            (seg,dwcs,x,y) = self.cutout_img(exp["gwcs"],exp["seg"])
         
             mask = (np.isfinite(img) &(img != 0))
             
@@ -449,7 +622,22 @@ class Galaxy(object):
         img[np.isnan(img)] = 0
 
         return (img.astype(np.float32),cutout.wcs,x,y)
-        
+
+    def cutout_img_NC(self, parent_wcs, direct_image, size):
+        """
+        Extract direct image cutout.
+        """
+        x, y = np.array(parent_wcs.world_to_pixel(self.sky)).astype(int)
+
+        cutout = Cutout2D(data=direct_image,position=(x,y),
+            size=(2*size,2*size),wcs=parent_wcs)
+
+        img = cutout.data
+        img[np.isnan(img)] = 0
+
+        return (img.astype(np.float32),cutout.wcs,x,y)
+
+    
     def in_image(self, wcs, image):
         """
         Check whether the object position falls inside an image footprint.
@@ -516,7 +704,198 @@ class Galaxy(object):
         
         return (spec.astype(np.float32),err.astype(np.float32),cutout.wcs)
 
+    def save_galaxy(self, outdir):
+        os.makedirs(outdir, exist_ok=True)
+    
+        # ── 1. Top-level metadata ─────────────────────────────────────────────
+        meta = {
+            "gid":   self.gid,
+            "sz":    self.sz,
+            "order": self.order,
+            "pad":   self.pad,
+            "ra":    self.ra,
+            "dec":   self.dec,
+        }
+        with open(os.path.join(outdir, "meta.json"), "w") as f:
+            json.dump(meta, f, indent=2)
+    
+        # ── 2. Hi-res images ──────────────────────────────────────────────────
+        if hasattr(self, "images") and self.images:
+            img_wcs = {}
+            with h5py.File(os.path.join(outdir, "images.h5"), "w") as h5:
+                for filt, val in self.images.items():
+                    if filt == "seg_wcs":
+                        continue
+                    if filt == "seg":
+                        h5.create_dataset("seg", data=self.images["seg"],
+                                          compression="gzip", compression_opts=4)
+                        img_wcs["seg"] = self.images["seg_wcs"].to_header_string()
+                    else:
+                        grp = h5.create_group(filt)
+                        for k, v in val.items():
+                            if k == "wcs":
+                                img_wcs[filt] = v.to_header_string()
+                            elif np.isscalar(v):
+                                grp.attrs[k] = v
+                            else:
+                                grp.create_dataset(k, data=v,
+                                                   compression="gzip", compression_opts=4)
+            with open(os.path.join(outdir, "images_wcs.pkl"), "wb") as f:
+                pickle.dump(img_wcs, f)
+    
+        # ── 3. Beams ──────────────────────────────────────────────────────────
+        beam_meta      = {}
+        beam_wcs       = {}
+        beam_trace     = {}   # full GrismTrace objects, not keys
+        beam_sens      = {}   # full sensitivity arrays
+    
+        with h5py.File(os.path.join(outdir, "beams.h5"), "w") as h5:
+            for pupil, beam_list in self.beams.items():
+                beam_meta[pupil]  = []
+                beam_wcs[pupil]   = []
+                beam_trace[pupil] = []
+                beam_sens[pupil]  = []
+    
+                for i, beam in enumerate(beam_list):
+                    grp = h5.create_group(f"{pupil}/{i:04d}")
+    
+                    # ── arrays ────────────────────────────────────────────────
+                    for section, datasets in [
+                        ("direct", ["sci", "seg"]),
+                        ("spec",   ["sci", "err", "x_trace", "y_trace",
+                                    "lam", "dlam", "sens"]),
+                    ]:
+                        sgrp = grp.create_group(section)
+                        for k in datasets:
+                            if k in beam.__dict__[section]:
+                                arr = np.asarray(beam.__dict__[section][k])
+                                sgrp.create_dataset(k, data=arr,
+                                                    compression="gzip", compression_opts=4)
+    
+                    for k in ("x", "y", "npx", "npy"):
+                        if k in beam.direct:
+                            grp["direct"].attrs[k] = beam.direct[k]
+    
+                    # ── WCS ────────────────────────────────────────────────────
+                    beam_wcs[pupil].append({
+                        "direct": beam.direct["wcs"],
+                        "spec":   beam.spec["wcs"],
+                    })
+    
+                    # ── metadata ──────────────────────────────────────────────
+                    bm = {k: beam.meta[k]
+                          for k in ("filter", "pupil", "gfile", "dfile")}
+                    bm["cutout_limits"] = beam.cutout_limits
+                    bm["validity"]      = beam.validity
+                    bm["valid_region"]  = beam.valid_region.tolist()
+                    beam_meta[pupil].append(bm)
+    
+                    # ── trace and sensitivity: store in full ───────────────────
+                    beam_trace[pupil].append(beam.meta["trace"])
+    
+                    wave, sens = beam.meta["sens"]
+                    beam_sens[pupil].append({
+                        "wave": wave.tolist(),
+                        "sens": sens.tolist(),
+                    })
+    
+        with open(os.path.join(outdir, "beam_meta.json"), "w") as f:
+            json.dump(beam_meta, f, indent=2)
+    
+        with open(os.path.join(outdir, "beam_wcs.pkl"), "wb") as f:
+            pickle.dump(beam_wcs, f)
+    
+        with open(os.path.join(outdir, "beam_trace.pkl"), "wb") as f:
+            pickle.dump(beam_trace, f)
+    
+        with open(os.path.join(outdir, "beam_sens.json"), "w") as f:
+            json.dump(beam_sens, f)
+    
+        print(f"Galaxy {self.gid} saved to {outdir}/")
 
+def load_galaxy(outdir):
+    gal = Galaxy.__new__(Galaxy)
+
+    # ── 1. Metadata ───────────────────────────────────────────────────────
+    with open(os.path.join(outdir, "meta.json")) as f:
+        meta = json.load(f)
+    gal.__dict__.update(meta)
+    gal.sky = SkyCoord(ra=gal.ra * u.deg, dec=gal.dec * u.deg, frame="icrs")
+
+    # field and imgdict not available standalone; set to None
+    gal.field   = None
+    gal.imgdict = None
+
+    # ── 2. Images ─────────────────────────────────────────────────────────
+    gal.images = {}
+    img_h5 = os.path.join(outdir, "images.h5")
+    if os.path.exists(img_h5):
+        with open(os.path.join(outdir, "images_wcs.pkl"), "rb") as f:
+            img_wcs_raw = pickle.load(f)
+        with h5py.File(img_h5, "r") as h5:
+            gal.images["seg"]     = h5["seg"][:]
+            gal.images["seg_wcs"] = wcs.WCS(fits.Header.fromstring(img_wcs_raw["seg"]))
+            for filt in h5.keys():
+                if filt == "seg":
+                    continue
+                gal.images[filt] = {}
+                grp = h5[filt]
+                for k in grp.keys():
+                    gal.images[filt][k] = grp[k][:]
+                for k, v in grp.attrs.items():
+                    gal.images[filt][k] = v
+                gal.images[filt]["wcs"] = wcs.WCS(
+                    fits.Header.fromstring(img_wcs_raw[filt]))
+
+    # ── 3. Beams ──────────────────────────────────────────────────────────
+    with open(os.path.join(outdir, "beam_meta.json")) as f:
+        beam_meta = json.load(f)
+    with open(os.path.join(outdir, "beam_wcs.pkl"), "rb") as f:
+        beam_wcs = pickle.load(f)
+    with open(os.path.join(outdir, "beam_trace.pkl"), "rb") as f:
+        beam_trace = pickle.load(f)
+    with open(os.path.join(outdir, "beam_sens.json")) as f:
+        beam_sens = json.load(f)
+
+    gal.beams = {}
+    with h5py.File(os.path.join(outdir, "beams.h5"), "r") as h5:
+        for pupil in beam_meta:
+            gal.beams[pupil] = []
+            for i, (bm, bw, bt, bs) in enumerate(
+                    zip(beam_meta[pupil], beam_wcs[pupil],
+                        beam_trace[pupil], beam_sens[pupil])):
+
+                beam = Beam()
+                grp  = h5[f"{pupil}/{i:04d}"]
+
+                # ── arrays ────────────────────────────────────────────────
+                for k in ("sci", "seg"):
+                    if k in grp["direct"]:
+                        beam.direct[k] = grp["direct"][k][:]
+                for k in ("x", "y", "npx", "npy"):
+                    if k in grp["direct"].attrs:
+                        beam.direct[k] = int(grp["direct"].attrs[k])
+                beam.direct["wcs"] = bw["direct"]
+
+                for k in ("sci", "err", "x_trace", "y_trace",
+                          "lam", "dlam", "sens"):
+                    if k in grp["spec"]:
+                        beam.spec[k] = grp["spec"][k][:]
+                beam.spec["wcs"] = bw["spec"]
+
+                # ── metadata ──────────────────────────────────────────────
+                beam.meta.update({k: bm[k]
+                                  for k in ("filter", "pupil", "gfile", "dfile")})
+                beam.meta["trace"] = bt
+                beam.meta["sens"]  = (np.array(bs["wave"]), np.array(bs["sens"]))
+
+                beam.cutout_limits = bm["cutout_limits"]
+                beam.validity      = bm["validity"]
+                beam.valid_region  = np.array(bm["valid_region"])
+
+                gal.beams[pupil].append(beam)
+
+    return gal
 
 def get_beam_limits(x,y,trace,sz,orient,order):
     """

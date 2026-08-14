@@ -65,22 +65,17 @@ class Sleuth(object):
                 mini_img = np.array(mini_img, dtype=float)
                 mini_img[mini_img == 0] = np.nan
                 
-                self.images[p]['img'] = np.nanmedian(mini_img, axis=0)       
+                self.images[p]['sci'] = np.nanmedian(mini_img, axis=0)       
                 # add pivot
                 
         elif self.img_source == 'reference':
-            ref_wcs = copy.deepcopy(self.ref_beam.direct['wcs'])
-            ref_wcs.pscale = 1
-            
             for filt in self.obj.images:
-                self.images[filt] = {}
-                inwcs = copy.deepcopy(self.obj.images[filt]['wcs'])
-                inwcs.pscale = 1
-                outimg = blot_direct_image(self.obj.images[filt]['sci'], inwcs, ref_wcs)
-                norm = np.max(self.obj.images[filt]['sci'][self.ref_beam.direct['seg'] == self.obj.gid]) /np.max(outimg[self.ref_beam.direct['seg'] == self.obj.gid])
-
-                self.images[filt]['img'] = outimg*drizzle_loss_factor * norm
-                self.images[filt]['pivot'] = self.obj.images[filt]['pivot']
+                if filt[0] == 'F':
+                    self.images[filt] = {}    
+                    self.images[filt]['sci'] = self.obj.images[filt]['sci']
+                    self.images[filt]['pivot'] = self.obj.images[filt]['pivot']
+                    self.images[filt]['wcs'] = self.obj.images[filt]['wcs']
+                    self.images[filt]['err'] = self.obj.images[filt]['err']
 
     def prepare_foward_model(self, chunk_size = 20):
 
@@ -89,7 +84,7 @@ class Sleuth(object):
                 beam.spec['disp'] = DispersionGeometry(beam.direct["sci"].shape,beam.spec['x_trace'], beam.spec['y_trace'], chunk_size=chunk_size)
                 beam.spec['disp'].build_scatter_cache()
         
-    def prepare_segmentation(self, sigma=3e-23, segmentation_filter=None):
+    def prepare_segmentation(self, segmentation_filter=None):
         """
         Prepare the images needed for resegmentation.
     
@@ -118,25 +113,8 @@ class Sleuth(object):
             if segmentation_filter is None:
                 segmentation_filter = list(self.images.keys())[0]
     
-        self.segmentation_image = self.images[segmentation_filter]['img']
-    
-        # ----------------------------------------
-        # Temporary variance map
-        # ----------------------------------------
-    
-        self.var_map = np.ones_like(self.segmentation_image) * sigma**2
-    
-        sigma = np.sqrt(self.var_map)
-    
-        
-        # ----------------------------------------
-        # luptitude images
-        # ----------------------------------------
-    
-        self.lup_images = {}
-    
-        for filt in self.images:
-            self.lup_images[filt] = self.flux_to_luptitude(self.images[filt]['img'], sigma)
+        self.segmentation_image = self.images[segmentation_filter]['sci']
+        self.var_map = self.images[segmentation_filter]['err']**2
     
         # ----------------------------------------
         # Color maps
@@ -144,20 +122,28 @@ class Sleuth(object):
     
         self.color_maps = {}
     
-        filters = list(self.lup_images.keys())
-    
-        for i in range(len(filters)):
-            for j in range(i + 1, len(filters)):
-    
-                f1 = filters[i]
-                f2 = filters[j]
-    
-                self.color_maps[(f1, f2)] = (self.lup_images[f1] - self.lup_images[f2])
+        filters = list(self.images.keys())
+                
+        for i in range(len(filters[2:])):
+            for j in range(i + 1, len(filters[2:])):
+        
+                f1 = filters[2:][i]
+                f2 = filters[2:][j]
+
+                im1 = self.images[f1]['sci']
+                im2 = self.images[f2]['sci']
+                
+                ci = self.safe_log_flux(im1) - self.safe_log_flux(im2)
+                self.color_maps[(f1, f2)] = ci
 
 
     def build_features(self, mode='color', image = None):
-        ref_seg = (self.ref_beam.direct["seg"] == self.obj.gid)
-    
+        if self.img_source == 'native':        
+            ref_seg = (self.ref_beam.direct["seg"] == self.obj.gid)
+
+        elif self.img_source == 'reference': 
+            ref_seg = (self.obj.images["seg"] == self.obj.gid)
+        
         # -------------------------------------------------
         # Pixel coordinates
         # -------------------------------------------------
@@ -223,11 +209,9 @@ class Sleuth(object):
 
     
     @staticmethod
-    def flux_to_luptitude(flux, sigma):    
-        b = sigma
-    
-        return -(2.5 / np.log(10.0)) * np.arcsinh(flux / (2.0 * sigma))    
-                        
+    def safe_log_flux(f):
+        return np.sign(f) * np.log1p(np.abs(f))
+        
     def reset_seg(self,):
         self.Nseg = (self.ref_beam.direct["seg"] >0) * self.obj.gid
         self.seg_ids = [self.obj.gid]
@@ -628,7 +612,7 @@ class Sleuth(object):
         self.extract_phot()
     
     def extract_phot(self):
-        self.phot = build_photometry([self.images[filt]['img'] for filt in self.images],self.Nseg,self.seg_ids,
+        self.phot = build_photometry([self.images[filt]['sci'] for filt in self.images],self.obj.images['seg'],self.seg_ids,
                        [filt for filt in self.images],self.Bkgseg)
     
     def Fit_Pupil(self, pupil, temp, z, return_covar=False):
