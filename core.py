@@ -27,29 +27,6 @@ class Sleuth(object):
 
         self.Bkgseg = self.ref_beam.direct['seg'] == 0
     
-    def clean_directs(self,):
-        ref_wcs = copy.deepcopy(self.ref_beam.direct['wcs'])
-        ref_wcs.pscale = 1
-
-        for p in self.obj.beams:
-            mini_img = []
-            for bm in self.obj.beams[p]:
-                inwcs = copy.deepcopy(bm.direct['wcs'])
-                inwcs.pscale = 1
-                outimg = blot_direct_image(bm.direct['sci'], inwcs, ref_wcs)
-                mini_img.append(outimg)
-                
-            mini_img = np.array(mini_img, dtype=float)
-            mini_img[mini_img == 0] = np.nan
-            clean_img = np.nanmedian(mini_img, axis = 0).astype(np.float32)
-            clean_img[np.isnan(clean_img)] = 0
-            for bm in self.obj.beams[p]:
-                inwcs = copy.deepcopy(bm.direct['wcs'])
-                inwcs.pscale = 1
-                outimg = blot_direct_image(clean_img, ref_wcs, inwcs)
-                norm = np.max(bm.direct['sci'][bm.direct['seg'] == self.obj.gid]) / np.max(outimg[bm.direct['seg'] == self.obj.gid])
-                bm.direct['sci'] = outimg*norm     
-
     def load_images(self, img_source, drizzle_loss_factor = 356):
         self.images = {}
         self.img_source = img_source
@@ -321,7 +298,7 @@ class Sleuth(object):
     
         self.nregions = len(regions)
                 
-    def flux_segment(self, image, flux_limit):
+    def flux_segment(self, image, flux_limit, downcast = True):
     
         """
         Segment galaxy using nearest-neighbor similarity,
@@ -396,7 +373,9 @@ class Sleuth(object):
             pix = coords[region]
     
             Nseg[pix[:,0],pix[:,1]] = i + 1
-    
+
+
+        
         self.Nseg = Nseg
     
         self.nregions = len(regions)
@@ -591,7 +570,6 @@ class Sleuth(object):
     
     def standard_config(self, snr_limit):
         #load images
-        # self.clean_directs()
         self.load_images('reference')
         
         #initialize spectra

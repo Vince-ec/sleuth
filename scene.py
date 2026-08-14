@@ -64,7 +64,7 @@ class Field(object):
         self.cat = Table.read(cat).to_pandas()
 
         # -------------------------
-        # Segmentation (TODO)
+        # Segmentation 
         # -------------------------
 
         self.in_seg = fits.getdata(seg)
@@ -118,13 +118,10 @@ class Field(object):
                 "direct": refimg,
 
                 "spec_err": np.pad(gdat[2].data, pad),
-                # "direct_err": np.pad(ddat[2].data, pad),
 
                 "spec_dq": np.pad(gdat[3].data, pad),
-                # "direct_dq": np.pad(ddat[3].data, pad),
                 
                 "gwcs": gwcs,
-                # "dwcs": wcs.WCS(ddat[1].header),
                 
                 "gheader": gdat[1].header,
                 "dheader": ddat[0].header,
@@ -173,7 +170,7 @@ class Field(object):
                     os.path.join(self.cal_dir,f"NIRISS_{pupil}_{filt}.V5.conf"))
 
         # -------------------------
-        # Hi-res images
+        # Hi-res image dictionary
         # -------------------------
         self.imgdict = {'imgs':{}, 'err':{}}
         if self.img_dir != None:
@@ -206,37 +203,6 @@ class Field(object):
                         tag = 'F606W'
                 
                 self.imgdict['err'][tag] = {'file':f}
-
-        
-            # for f in glob(self.ngimg_dir + 'whts/*'):
-            #     dat = fits.open(f)
-            #     self.imgdict['err'][dat[0].header['FILTER']] = {}
-            #     self.imgdict['err'][dat[0].header['FILTER']]['file'] = f
-
-            # self.NGimages = {}
-                
-            # # dat = fits.open(glob(os.path.join(self.ngimg_dir, "*"))[0])
-
-            # outseg = blot_segmentation(self.in_seg, self.seg_wcs,
-            #                            wcs.WCS(dat[0].header),dat[0].data.shape,fill_value=0)
-            
-            # # for ngfile in sorted(glob(os.path.join(self.ngimg_dir, "*"))):
-            # for k in ngdict['imgs']:
-
-            #     # dat = fits.open(ngfile)
-            #     mask = binary_dilation(outseg > 0, iterations=5)
-            #     mask |= ~np.isfinite(ngdict['imgs'][k]['img'] )
-            #     mask |= (ngdict['imgs'][k]['img']  == 0)
-            #     _, med, _ = sigma_clipped_stats(ngdict['imgs'][k]['img'] *1e20,mask=mask,sigma=3.0,maxiters=5)
-
-            #     self.NGimages[k] = {}
-            #     self.NGimages[k]['image'] = (ngdict['imgs'][k]['img']  - med*1e-20)
-            #     self.NGimages[k]['err'] = ngdict['err'][k]['img'] 
-            #     self.NGimages[k]['background'] = med
-            #     self.NGimages[k]['pivot'] = ngdict['imgs'][k]['header']['PIVOT']
-            #     self.NGimages[k]['ofile'] = ngdict['imgs'][k]['header']['OFILE']
-            #     self.NGimages[k]['photflam'] = ngdict['imgs'][k]['header']['PHOTFLAM']
-            #     self.NGimages[k]['wcs'] = wcs.WCS(ngdict['imgs'][k]['header'])
             
         # -------------------------
         # Contam Table gen
@@ -443,7 +409,7 @@ class Galaxy(object):
         """
 
         # -------------------------
-        # NG image cutouts
+        # NC image cutouts
         # -------------------------
         if self.field.img_dir != None:
 
@@ -479,11 +445,6 @@ class Galaxy(object):
                 (img,nwcs,x,y) = self.cutout_img_NC(wcs.WCS(dat[0].header), dat[0].data, size = size)
             
                 self.images[filt]["err"] = 1/np.sqrt(img) * dat[0].header['PHOTFLAM']
-
-
-                
-        # NGwcs = copy.deepcopy(self.field.NGimages['F200W']['wcs'])
-        # NGwcs.pscale = 1
         
         for exp in self.field.exposures:
             # skip exposures where object is not observed
@@ -499,7 +460,6 @@ class Galaxy(object):
             # -------------------------
             # Direct cutout
             # -------------------------
-            # (img,err,seg,dwcs,x,y) = self.cutout_dir(exp["gwcs"],exp["direct"],exp["direct_err"],exp["seg"])
             (img,dwcs,x,y) = self.cutout_img(exp["gwcs"],exp["direct"])
             (seg,dwcs,x,y) = self.cutout_img(exp["gwcs"],exp["seg"])
         
@@ -508,7 +468,7 @@ class Galaxy(object):
             fraction = mask.mean()
             
             if fraction < 0.9:            
-                img = blot_direct_image(self.field.NGimages[exp['pupil']]['image'], NGwcs, dwcs)
+                img = blot_direct_image(self.field.images[exp['pupil']]['image'], self.field.images[exp['pupil']]['wcs'], dwcs)
            
             beam.direct["sci"] = img
             # beam.direct["err"] = err
@@ -583,32 +543,6 @@ class Galaxy(object):
             self.beams[pupil].append(beam)
 
 
-    def cutout_dir(self, parent_wcs, direct_image,seg_image):
-        """
-        Extract direct image cutout.
-        """
-        x, y = np.array(parent_wcs.world_to_pixel(self.sky)).astype(int)
-
-        cutout = Cutout2D(data=direct_image,position=(x,y),
-            size=(2*self.sz,2*self.sz),wcs=parent_wcs)
-
-        img = cutout.data
-        img[np.isnan(img)] = 0
-
-        # cutout = Cutout2D(data=err_image,position=(x,y),
-        #     size=(2*self.sz,2*self.sz),wcs=parent_wcs)
-
-        # err = cutout.data
-        # err[np.isnan(err)] = 0
-
-        cutout = Cutout2D(data=seg_image,position=(x,y),
-            size=(2*self.sz,2*self.sz),wcs=parent_wcs)
-
-        seg = cutout.data
-        
-        return (img.astype(np.float32),seg.astype(np.int32),cutout.wcs,x,y)
-
-
     def cutout_img(self, parent_wcs, direct_image):
         """
         Extract direct image cutout.
@@ -637,7 +571,6 @@ class Galaxy(object):
 
         return (img.astype(np.float32),cutout.wcs,x,y)
 
-    
     def in_image(self, wcs, image):
         """
         Check whether the object position falls inside an image footprint.
