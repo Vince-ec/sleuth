@@ -17,6 +17,8 @@ import jax.numpy as jnp
 import jax
 
 import matplotlib.pyplot as plt
+from scipy.ndimage import affine_transform
+from scipy.optimize import minimize
 
 class Sleuth(object):
     def __init__(self, obj, msk_min = 0.1 ):
@@ -826,6 +828,36 @@ class Sleuth(object):
     
         return model
 
+def shift_rotate(image, dx, dy, angle_deg, order=3):
+    theta = np.deg2rad(angle_deg)
+    cos_t, sin_t = np.cos(theta), np.sin(theta)
+
+    rot_inv = np.array([[cos_t, sin_t],[-sin_t, cos_t]])
+
+    center = np.array(image.shape) / 2.0
+    offset = center - rot_inv @ center - np.array([dy, dx])
+
+    return affine_transform(image, rot_inv, offset=offset, order=order, mode='constant', cval=0.0, prefilter=(order > 1),)
+
+
+def asymmetric_loss(params, data, model, error,mask, lam=.01):
+
+    dx, dy, theta, amp = params
+
+    shifted_model = shift_rotate( model, dx=dx, dy=dy, angle_deg=theta)
+
+    residual = data - shifted_model*amp
+
+    # Weight by uncertainty
+    r = residual[mask] / error[mask]
+
+    # Penalize oversubtraction more strongly
+    loss = np.where(r >= 0, r**2, lam * r**2)
+
+    return np.sum(loss)
+
+
+    
 class DispersionGeometry:
 
     def __init__(self,

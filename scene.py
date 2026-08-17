@@ -462,13 +462,22 @@ class Galaxy(object):
             # -------------------------
             (img,dwcs,x,y) = self.cutout_img(exp["gwcs"],exp["direct"])
             (seg,dwcs,x,y) = self.cutout_img(exp["gwcs"],exp["seg"])
-        
+            
+            cd = dwcs.wcs.pc * dwcs.wcs.cdelt[:, None]
+            dwcs.wcs.cd = cd
+            
             mask = (np.isfinite(img) &(img != 0))
             
             fraction = mask.mean()
             
-            if fraction < 0.9:            
-                img = blot_direct_image(self.field.images[exp['pupil']]['image'], self.field.images[exp['pupil']]['wcs'], dwcs)
+            if fraction < 0.9:     
+                dat = fits.open(self.field.imgdict['imgs'][exp['pupil']]['file'])
+                outwcs = wcs.WCS(dat[0].header)
+                outwcs.pscale = 1
+                
+                img = blot_direct_image(dat[0].data * dat[0].header['PHOTFLAM'],
+                                        outwcs, 
+                                        dwcs)
            
             beam.direct["sci"] = img
             # beam.direct["err"] = err
