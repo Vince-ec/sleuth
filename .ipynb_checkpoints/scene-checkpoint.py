@@ -33,10 +33,11 @@ class Field(object):
     Loads all exposures, calibration information, and the source catalog.
     """
 
-    def __init__(self, grism_files, ref_files, cal_dir, cat, seg,contam, img_dir=None, pad = 800):
+    def __init__(self, grism_files, ref_files, cal_dir, cat, seg, contam_files, img_dir=None, pad = 800):
 
         self.grism_files = grism_files
         self.ref_files = ref_files
+        self.contam_files = contam_files
         self.cal_dir = cal_dir
         self.pad = pad
         self.img_dir = img_dir
@@ -82,7 +83,7 @@ class Field(object):
 
         self.trace = {}
         self.sensitivity = {}
-
+                    
         # -------------------------
         # Read all grism exposures
         # -------------------------
@@ -135,6 +136,32 @@ class Field(object):
             
             self.exposures.append(exposure)
 
+
+            # -------------------------
+            # load in contam
+            # -------------------------
+            if self.contam_files == None:
+                self.contam = {}
+    
+                self.trace_corrections = False
+                self.correction_table = {'F115W': {'+1':{}, '0':{}, '+2':{}, '+3':{}, '-1':{}},
+                                        'F150W': {'+1':{}, '0':{}, '+2':{}, '+3':{}, '-1':{}},
+                                        'F200W': {'+1':{}, '0':{}, '+2':{}, '+3':{}, '-1':{}}}
+                
+                for exp in self.exposures:
+                    if not exp["pupil"] in self.contam:
+                        self.contam[exp["pupil"]] = {}
+                        
+                    self.contam[exp['pupil']][exp['gfile']] = np.zeros_like(refimg)
+                    
+            else:
+                with open(os.path.join(self.contam_files, 'contam.pkl'), 'rb') as f:
+                    self.contam = pickle.load(f)
+                
+                with open(os.path.join(self.contam_files, 'correction_table.pkl'), 'rb') as f:
+                    self.correction_table = pickle.load(f)
+                       
+                self.trace_corrections = True 
             # -------------------------
             # Cache sensitivity curves
             # -------------------------
@@ -306,7 +333,7 @@ class Field(object):
         
         print(f"Saved to {outdir}/")
 
-def load_field(outdir):
+def load_field(outdir, contam_dir):
     field = Field.__new__(Field)   # skip __init__
 
     # ── metadata ──────────────────────────────────────────────────────────
@@ -362,10 +389,14 @@ def load_field(outdir):
     with open(os.path.join(outdir, "imgdict.json")) as f:
         field.imgdict = json.load(f)
     
-    # ── segmentation (stored per-exposure; top-level seg/wcs if needed) ────
-    # in_seg and seg_wcs can be reloaded from original seg file if needed
-    # or stored similarly; skipped here unless you need them post-load
-
+    # ── contam ─────────────────────────────────────────────────
+    if contam_dir != None:
+        with open(os.path.join(contam_files, 'contam.pkl'), 'rb') as f:
+            field.contam = pickle.load(f)
+        
+        with open(os.path.join(contam_files, 'correction_table.pkl'), 'rb') as f:
+            field.correction_table = pickle.load(f)
+        
     return field
 
     
@@ -381,13 +412,15 @@ class Beam(object):
         self.cutout_limits = None
 
 class Galaxy(object):
-    def __init__(self, field, gid, sz=20, order = "+1"):
+    def __init__(self, field, gid, sz=20, order = "+1", substitute_filter = None):
         self.gid = gid
         self.sz = sz
         self.order = order
         self.pad = field.pad
         self.field = field
         self.imgdict = field.imgdict
+        self.substitute_filter = substitute_filter
+        
         # catalog information
         source = field.cat.query(f"id == {gid}")
 
@@ -446,7 +479,7 @@ class Galaxy(object):
             
                 self.images[filt]["err"] = 1/np.sqrt(img) * dat[0].header['PHOTFLAM']
         
-        for exp in self.field.exposures:
+        for xnum, exp in enumerate(self.field.exposures):
             # skip exposures where object is not observed
             if not self.in_image(exp["gwcs"], exp["direct"]):
                 print(
@@ -475,10 +508,32 @@ class Galaxy(object):
                 outwcs = wcs.WCS(dat[0].header)
                 outwcs.pscale = 1
                 
-                img = blot_direct_image(dat[0].data * dat[0].header['PHOTFLAM'],
-                                        outwcs, 
-                                        dwcs)
-           
+                img = blot_direct_image(dat[0].data * dat[0].header['PHOTFLAM'],outwcs, dwcs)
+
+                img_status = 'sub nircam'
+
+                mask = (np.isfinite(img) &(img != 0))
+                
+                fraction = mask.mean()
+
+                if fraction < 0.9:     
+                    dat = fits.open(self.field.imgdict['imgs'][self.substitute_filter]['file'])
+                    outwcs = wcs.WCS(dat[0].header)
+                    outwcs.pscale = 1
+                    
+                    img = blot_direct_image(dat[0].data * dat[0].header['PHOTFLAM'],outwcs, dwcs)
+    
+                    img_status = 'used sub filter'
+    
+                    mask = (np.isfinite(img) &(img != 0))
+                    
+                    fraction = mask.mean()
+                    if fraction < 0.9:     
+                        img_status = 'no valid image'
+
+            else:
+                img_status = 'good'
+            
             beam.direct["sci"] = img
             # beam.direct["err"] = err
             beam.direct["seg"] = seg
@@ -498,6 +553,8 @@ class Galaxy(object):
             beam.meta["pupil"] = exp["pupil"]
             beam.meta["gfile"] = exp["gfile"]
             beam.meta["dfile"] = exp["dfile"]
+            beam.meta["img_status"] = img_status
+            beam.meta["exposure_number"] = xnum
             
             key = (exp['filter'], exp['pupil'])
             beam.meta["trace"] = self.field.trace[key]
@@ -540,6 +597,14 @@ class Galaxy(object):
             beam.spec["dlam"] = np.abs(jnp.gradient(beam.spec["lam"] * 1e4))
             beam.spec["sens"] = jnp.interp(beam.spec["lam"], np.ravel(beam.meta['sens'][0]), np.ravel(beam.meta['sens'][1])) * beam.spec["dlam"]
 
+            # -------------------------
+            # Contam
+            # -------------------------
+            y1,y2,x1,x2 = limits
+            
+            beam.spec["contam"] = self.field.contam[beam.meta["pupil"]][beam.meta["gfile"]][y1:y2,x1:x2]
+            #need to add trace correct to remove model
+            
             # -------------------------
             # Add beam
             # -------------------------
@@ -726,7 +791,7 @@ class Galaxy(object):
     
                     # ── metadata ──────────────────────────────────────────────
                     bm = {k: beam.meta[k]
-                          for k in ("filter", "pupil", "gfile", "dfile")}
+                          for k in ("filter", "pupil", "gfile", "dfile", "exposure_number")}
                     bm["cutout_limits"] = beam.cutout_limits
                     bm["validity"]      = beam.validity
                     bm["valid_region"]  = beam.valid_region.tolist()
@@ -827,7 +892,7 @@ def load_galaxy(outdir):
 
                 # ── metadata ──────────────────────────────────────────────
                 beam.meta.update({k: bm[k]
-                                  for k in ("filter", "pupil", "gfile", "dfile")})
+                                  for k in ("filter", "pupil", "gfile", "dfile", "exposure_number")})
                 beam.meta["trace"] = bt
                 beam.meta["sens"]  = (np.array(bs["wave"]), np.array(bs["sens"]))
 
