@@ -11,6 +11,8 @@ line_dict = {'Lya':1215.24,'CIV-1549': 1549.48, 'MgII':2799.117,'NeV-3346':3346.
              'Ha' :6564.61,'SII':6732.67,'ArIII-7138':7138,  'OII-7325':7325,
              'SIII' : 9533.2, 'PaD':10049.368, 'HeI-1083':10830, 'PaG': 10941.1,'PaB':12820, 'PaA':18750 }
 
+split_line_dict = {'OI-6302':['OI-6302_a', 'OI-6302_b'], 'OIII':['OIII-4959', 'OIII-5008'], 'SIII':['SIII-9068', 'SIII-9531']}
+
 class TemplateLibrary(object):
     """
     Continuum and emission-line template library for Sleuth.
@@ -304,9 +306,11 @@ def line_templates(lines, line_dir):
             wave, flux = np.load(f"{line_dir}/{line}_line.npy")
             templates[line] = Grism_template(wave,flux)
 
-        if os.path.isfile(f"{line_dir}/{line}_line_split.npy"):
-            wave, flux = np.load(f"{line_dir}/{line}_line.npy")
-            templates[line] = Grism_template(wave,flux)
+        # if os.path.isfile(f"{line_dir}/{line}_line_split.npy"):
+        if line in split_line_dict:
+            for split in split_line_dict[line]:
+                wave, flux = np.load(f"{line_dir}/{split}_line_split.npy")
+                templates[split] = Grism_template(wave,flux)
         
     return templates
     
@@ -379,13 +383,13 @@ def expand_templates(tdict, coeff, OK, line_templates):
 
                 expanded_templates[sid]["OIII-4959"] = (line_templates["OIII-4959"])
 
-                expanded_templates[sid]["OIII"] = (line_templates["OIII"])
+                expanded_templates[sid]["OIII-5008"] = (line_templates["OIII-5008"])
 
                 expanded_coeff.extend([coeff[coeff_idx], coeff[coeff_idx]])
 
                 expanded_OK.extend([OK[coeff_idx], OK[coeff_idx]])
 
-                names.extend(["OIII-4959","OIII"])
+                names.extend(["OIII-4959","OIII-5008"])
 
 
             # ------------------------

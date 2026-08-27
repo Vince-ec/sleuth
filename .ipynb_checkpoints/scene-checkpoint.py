@@ -562,6 +562,8 @@ class Galaxy(object):
             key = (exp['filter'], exp['pupil'], self.order)
             beam.meta["sens"] = self.field.sensitivity[key]
 
+            beam.corrected = False
+            
             # -------------------------
             # Find spectral cutout limits
             # -------------------------
@@ -724,8 +726,8 @@ class Galaxy(object):
             "dec":   self.dec,
         }
         with open(os.path.join(outdir, "meta.json"), "w") as f:
-            json.dump(meta, f, indent=2)
-    
+            json.dump(meta, f, indent=2, cls=NumpyEncoder)
+            
         # ── 2. Hi-res images ──────────────────────────────────────────────────
         if hasattr(self, "images") and self.images:
             img_wcs = {}
@@ -770,7 +772,7 @@ class Galaxy(object):
                     for section, datasets in [
                         ("direct", ["sci", "seg"]),
                         ("spec",   ["sci", "err", "x_trace", "y_trace",
-                                    "lam", "dlam", "sens"]),
+                                    "lam", "dlam", "sens", "contam"]),
                     ]:
                         sgrp = grp.create_group(section)
                         for k in datasets:
@@ -807,7 +809,7 @@ class Galaxy(object):
                     })
     
         with open(os.path.join(outdir, "beam_meta.json"), "w") as f:
-            json.dump(beam_meta, f, indent=2)
+            json.dump(beam_meta, f, indent=2,cls=NumpyEncoder)
     
         with open(os.path.join(outdir, "beam_wcs.pkl"), "wb") as f:
             pickle.dump(beam_wcs, f)
@@ -816,7 +818,7 @@ class Galaxy(object):
             pickle.dump(beam_trace, f)
     
         with open(os.path.join(outdir, "beam_sens.json"), "w") as f:
-            json.dump(beam_sens, f)
+            json.dump(beam_sens, f, cls=NumpyEncoder)
     
         print(f"Galaxy {self.gid} saved to {outdir}/")
 
@@ -885,7 +887,7 @@ def load_galaxy(outdir):
                 beam.direct["wcs"] = bw["direct"]
 
                 for k in ("sci", "err", "x_trace", "y_trace",
-                          "lam", "dlam", "sens"):
+                          "lam", "dlam", "sens", "contam"):
                     if k in grp["spec"]:
                         beam.spec[k] = grp["spec"][k][:]
                 beam.spec["wcs"] = bw["spec"]
@@ -899,7 +901,7 @@ def load_galaxy(outdir):
                 beam.cutout_limits = bm["cutout_limits"]
                 beam.validity      = bm["validity"]
                 beam.valid_region  = np.array(bm["valid_region"])
-
+                
                 gal.beams[pupil].append(beam)
 
     return gal
@@ -998,3 +1000,14 @@ def pad_wcs(wcs_in, pad):
 
     return owcs
     
+class NumpyEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, np.integer):
+            return int(obj)
+        if isinstance(obj, np.floating):
+            return float(obj)
+        if isinstance(obj, np.ndarray):
+            return obj.tolist()
+        if isinstance(obj, np.bool_):
+            return bool(obj)
+        return super().default(obj)

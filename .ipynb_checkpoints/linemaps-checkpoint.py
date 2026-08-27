@@ -8,9 +8,11 @@ from astropy import wcs
 from astropy.coordinates import SkyCoord
 import astropy.units as u
 from drizzlepac import astrodrizzle
+from scipy.optimize import minimize
 
 from .templates import Grism_template, expand_templates, line_templates,line_dict
 from .blot_utils import blot_segmentation
+from .fitting_utils import asymmetric_loss, shift_rotate
 
 def build_model_matrix(gx, MB, template,z):
     """
@@ -42,24 +44,20 @@ def build_model_matrix(gx, MB, template,z):
                 spectrum.redshift_spec(z))
 
 
-            rows.append(mdl.ravel()[mask])
+            rows.append(mdl.ravel())
 
     A = np.asarray(rows)
 
     
     return A
     
-def evaluate_model_matrix(model_matrix, shape, mask, coeff):
+def evaluate_model_matrix(model_matrix, coeff):
 
     A = model_matrix
 
     model_1d = coeff @ A
 
-    image = np.zeros(shape)
-
-    image[mask] = model_1d
-
-    return image
+    return model_1d
     
 def mask_slice_templates(gx, beam, templates, line_wave_obs, z):
 
@@ -113,7 +111,7 @@ def get_wcs_pscale(wcs):
     wcs.pscale = pscale
     return pscale
 
-def make_output_wcs(ra, dec, size=8.0, pixscale=0.04, theta=0.0):
+def make_output_wcs(ra, dec, size=8.0, pixscale=0.06, theta=0.0):
     """
     Generate an output tangent-plane WCS.
 
@@ -365,7 +363,7 @@ class WCSMapAll:
         """
         return wcs.all_world2pix(ra, dec, 1)
 
-def ELM_extract(gx, beam, model, line_wave_obs, pixfrac=1.0,kernel="point", size=8.0, pixscale=0.04):
+def ELM_extract(gx, beam, model, line_wave_obs, pixfrac=1.0,kernel="gaussian", size=8.0, pixscale=0.06):
     wcsmap = WCSMapAll
     beam_wcs = get_elm_wcs(gx,beam, line_wave_obs)
     output_wcs = make_output_wcs(gx.obj.ra, gx.obj.dec, size=size, pixscale=pixscale)
@@ -395,7 +393,7 @@ def ELM_extract(gx, beam, model, line_wave_obs, pixfrac=1.0,kernel="point", size
             if wcs_ext is not None:
                 wcs_ext.crpix[j] = beam_wcs.wcs.crpix[j]
     
-    beam_data =beam.spec["sci"] - model
+    beam_data =beam.spec["sci"] - model - beam.spec['contam']
     
     # contam_weight = np.exp(-(fcontam * np.abs(beam.contam) * np.sqrt(beam.ivar)))
     
@@ -421,6 +419,9 @@ def ELM_extract(gx, beam, model, line_wave_obs, pixfrac=1.0,kernel="point", size
                          pixfrac= pixfrac, kernel=kernel, fillval=0, 
                          stepsize=10, wcsmap=wcsmap)
 
+    line[line < -.1] = 0
+    weight[weight > 800] = 800
+    
     return {"map":line, "weight":weight, "wcs" : output_wcs}
 
 def combine_line_maps(gx, maps, line, line_wave_obs, z, pixscale,
@@ -575,8 +576,8 @@ def combine_line_maps(gx, maps, line, line_wave_obs, z, pixscale,
     # -------------------------------------------------
 
     segmap = blot_segmentation(
-        gx.ref_beam.direct["seg"],
-        gx.ref_beam.direct["wcs"],
+        gx.nircam_Nseg,
+        gx.obj.images["seg_wcs"],
         output_wcs,
         combined_line.shape,
         fill_value=0)
@@ -621,7 +622,7 @@ def combine_line_maps(gx, maps, line, line_wave_obs, z, pixscale,
 
 
 
-def save_sleuth_maps(filename, gx, maps, lines, z, pixscale=0.04,
+def save_sleuth_maps(filename, gx, maps, lines, z, pixscale=0.06,
                      kernel="point"):
     """
     Save Sleuth emission line maps to HDF5.
@@ -702,7 +703,7 @@ def save_sleuth_maps(filename, gx, maps, lines, z, pixscale=0.04,
             # Science arrays
             # -----------------------------
 
-            datasets = ["line","slice","error","weight","coverage","mask",]
+            datasets = ["line","slice","error","weight","coverage","mask","seg", "direct"]
 
             for key in datasets:
 
@@ -728,7 +729,7 @@ def save_sleuth_maps(filename, gx, maps, lines, z, pixscale=0.04,
             grp.attrs["metadata"] = json.dumps(meta)
 
 
-def build_line_maps(gx, pupil, tdict, specz, uselines, outfile, line_dir):
+def build_line_maps(gx, pupil, tdict, specz, uselines, outfile, line_dir, pixscale = 0.06):
     ldict = line_templates(list(line_dict.keys()),line_dir)
 
     maps = {line: {} for line in uselines}    
@@ -743,26 +744,133 @@ def build_line_maps(gx, pupil, tdict, specz, uselines, outfile, line_dir):
         templates, ex_coeff, OK, names = expand_templates(tdict, full_coeffs, active, ldict)
         
         template_matrix = build_model_matrix(gx, MB, templates, specz)
-    
+
+        mdl = gx.reconstruct_model(MB, full_coeffs, tdict, specz)
+        
+        if not MB.corrected:
+            result = minimize(asymmetric_loss, x0=[0, 0, 0,1],args=(MB.spec['sci'] - MB.spec['contam'], mdl, 
+                    MB.spec['err'], MB.mask),method='Powell',
+                    bounds=[(-2, 2),(-2, 2),(-1, 1),(0.9, 1.1)],
+                    options={'xtol': 1e-5, 'ftol': 1e-5, 'maxiter': 1000, 'disp': False,})
+            
+            dx, dy, theta, amp = result.x
+
         for line in uselines:
             Cx = set_line_to_zero(ex_coeff, names, line)
-            full_model = evaluate_model_matrix(template_matrix,np.shape(MB.mask), MB.mask, Cx)
+            # full_model = evaluate_model_matrix(,np.shape(MB.mask), MB.mask, Cx)
+            full_model = np.reshape(Cx @ template_matrix, np.shape(mdl))
             line_wave_obs = line_dict[line]*(1+specz)
-    
-            sliced_templates = mask_slice_templates(gx,MB,templates, line_wave_obs, specz)
+
+            if not MB.corrected:
+                full_model = shift_rotate( np.asarray(full_model), dx=dx, dy=dy, theta_deg=theta)*amp
+
+            # sliced_templates = mask_slice_templates(gx,MB,templates, line_wave_obs, specz)
             
-            sliced_template_matrix = build_model_matrix(gx, MB, sliced_templates, 0)
+            # sliced_template_matrix = build_model_matrix(gx, MB, sliced_templates, 0)
             
-            slice_model = evaluate_model_matrix(sliced_template_matrix,np.shape(MB.mask), MB.mask, Cx)
+            # slice_model = evaluate_model_matrix(sliced_template_matrix,np.shape(MB.mask), MB.mask, Cx)
     
             maps[line][beam_id] ={"line" : ELM_extract(gx, MB, full_model, line_wave_obs),  
-                "slice" : ELM_extract(gx, MB, slice_model, line_wave_obs)  }  
+                "slice" : ELM_extract(gx, MB, full_model, line_wave_obs)   }  # fix slice
 
     MAPS = {}
     for line in uselines:
         line_wave_obs = line_dict[line]*(1+specz)
         
-        MAPS[line] = combine_line_maps(gx,maps, line, line_wave_obs,specz, pixscale=0.04, kernel='point')
+        MAPS[line] = combine_line_maps(gx,maps, line, line_wave_obs,specz, pixscale=pixscale, kernel='point')
     
     save_sleuth_maps(outfile, gx, MAPS, uselines, specz)
+
+def load_sleuth_maps(filename, obj_id=None, lines=None):
+    """
+    Load Sleuth emission line maps saved by `save_sleuth_maps`.
+
+    Parameters
+    ----------
+    filename : str
+        HDF5 filename to load.
+    obj_id : str or int, optional
+        Object ID to load. If None, loads the first (only) object
+        group found in the file.
+    lines : list of str, optional
+        Subset of lines to load. If None, loads all lines present.
+
+    Returns
+    -------
+    dict with structure:
+        {
+            "obj_id": str,
+            "metadata": dict,          # object-level metadata
+            "direct_wcs": WCS,         # direct image WCS
+            "maps": {
+                line: {
+                    "line": array,
+                    "slice": array,
+                    "error": array,
+                    "weight": array,
+                    "coverage": array,
+                    "mask": array,
+                    "wcs": WCS,
+                    "metadata": dict,
+                },
+                ...
+            },
+        }
+    """
+    with h5py.File(filename, "r") as f:
+        # ---------------------------------------
+        # Resolve object group
+        # ---------------------------------------
+        if obj_id is None:
+            obj_id = list(f.keys())[0]
+        else:
+            obj_id = str(obj_id)
+
+        if obj_id not in f:
+            raise KeyError(
+                f"Object id '{obj_id}' not found in {filename}. "
+                f"Available: {list(f.keys())}"
+            )
+
+        obj = f[obj_id]
+
+        # ---------------------------------------
+        # Object metadata
+        # ---------------------------------------
+        obj_meta = json.loads(obj.attrs["metadata"])
+        direct_wcs = WCS(obj.attrs["direct_wcs"])
+
+        # ---------------------------------------
+        # Line groups
+        # ---------------------------------------
+        available_lines = [k for k in obj.keys()]
+        line_list = lines if lines is not None else available_lines
+
+        maps = {}
+        for line in line_list:
+            if line not in obj:
+                print(f"Warning: line '{line}' not found in {filename}, skipping.")
+                continue
+
+            grp = obj[line]
             
+            datasets = ["line","slice","error","weight","coverage","mask","seg", "direct"]
+
+            line_data = {}
+            for key in datasets:
+                if key in grp:
+                    line_data[key] = grp[key][()]
+                else:
+                    print(f"Warning: dataset '{key}' missing for line '{line}'.")
+
+            line_data["wcs"] = WCS(grp.attrs["wcs"])
+            line_data["metadata"] = json.loads(grp.attrs["metadata"])
+
+            maps[line] = line_data
+
+        return {
+            "obj_id": obj_id,
+            "metadata": obj_meta,
+            "direct_wcs": direct_wcs,
+            "maps": maps,
+        }

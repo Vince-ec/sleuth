@@ -6,19 +6,22 @@ from astropy.wcs import wcs
 from sklearn.preprocessing import StandardScaler
 import scipy
 from scipy.special import huber
+from astropy.stats import sigma_clipped_stats
 
 from .blot_utils import blot_segmentation, blot_direct_image
 from .photometry import build_photometry
 from .templates import Grism_template
 from .oned import OneDExtraction
 from .linemaps import build_line_maps
+from .fitting_utils import asymmetric_loss, shift_rotate
 
 import jax.numpy as jnp
 import jax
 
 import matplotlib.pyplot as plt
-from scipy.ndimage import affine_transform
 from scipy.optimize import minimize
+from scipy.special import huber
+import cv2
 
 class Sleuth(object):
     def __init__(self, obj, msk_min = 0.1 ):
@@ -30,8 +33,8 @@ class Sleuth(object):
         self.ref_beam = next(iter(self.obj.beams.values()))[0]
 
         self.Bkgseg = self.ref_beam.direct['seg'] == 0
-    
-    def load_images(self, img_source, drizzle_loss_factor = 356):
+                
+    def load_images(self, img_source):
         self.images = {}
         self.img_source = img_source
         
@@ -50,6 +53,8 @@ class Sleuth(object):
                 # add pivot
                 
         elif self.img_source == 'reference':
+            self.nircam_Nseg = self.obj.images['seg']
+
             for filt in self.obj.images:
                 if filt[0] == 'F':
                     self.images[filt] = {}    
@@ -58,6 +63,50 @@ class Sleuth(object):
                     self.images[filt]['wcs'] = self.obj.images[filt]['wcs']
                     self.images[filt]['err'] = self.obj.images[filt]['err']
 
+    def background_subtract_spec(self):
+        self.bkgs = {}
+        for p in self.obj.beams:
+            self.bkgs[p] = {}
+            
+            for bid, b in enumerate(self.obj.beams[p]):
+                d = b.spec['sci']
+                d[np.isnan(d)] = 0
+            
+                unique_values, counts = np.unique(d, return_counts=True)
+                rpts = unique_values[counts > 1]
+                rmask = np.ones_like(d)
+                for r in rpts:
+                    rmask[b.spec['sci'] == r] = 0
+            
+                t = b.flat['sci'][~b.flat['mask']*np.ravel(rmask==1)]
+            
+                _, bkg, _ = sigma_clipped_stats(t[t!=0], sigma=3.0)
+
+                self.bkgs[p][bid] = bkg
+                b.spec['sci'] -= bkg
+
+    def correct_trace(self):        
+        for pupil in self.obj.beams:
+            for MB in self.obj.beams[pupil]:
+                flux = np.sum(self.images[pupil]['sci'][self.obj.images['seg'] > 0])
+                total_flux = np.sum(MB.direct['sci'][MB.direct['seg']>0])
+                
+                mdl = self.forward_model(MB,MB.direct['sci'], [MB.spec['lam']*1e4, 
+                        flux*np.ones_like(MB.spec['lam'])/total_flux])
+                
+                maxamp = 1.1
+                if self.obj.order == '0':
+                    maxamp = 2.0
+                
+                result = minimize(asymmetric_loss, x0=[0, 0, 0,1],args=(MB.spec['sci'], mdl, 
+                        MB.spec['err'], MB.mask),method='Powell',
+                        bounds=[(-2, 2),(-2, 2),(-1, 1),(0.9, maxamp)],
+                        options={'xtol': 1e-5, 'ftol': 1e-5, 'maxiter': 1000, 'disp': False,})
+                
+                dx, dy, theta, amp = result.x
+                MB.spec['correction'] = (dx,dy,theta, amp)
+                MB.corrected = True
+              
     def prepare_foward_model(self, chunk_size = 20):
 
         for p in self.obj.beams:
@@ -195,10 +244,12 @@ class Sleuth(object):
         
     def reset_seg(self,):
         self.Nseg = (self.ref_beam.direct["seg"] >0) * self.obj.gid
+        self.nircam_Nseg = (self.nircam_Nseg >0) * self.obj.gid
         self.seg_ids = [self.obj.gid]
 
     def single_seg(self,):
         self.Nseg = (self.ref_beam.direct["seg"] == self.obj.gid) * 1
+        self.nircam_Nseg = (self.nircam_Nseg == self.obj.gid) * 1
         self.seg_ids = [1]
     
     def segment(self, method = 'color', limit=100, image = None, downcast = True):
@@ -331,6 +382,7 @@ class Sleuth(object):
                 self.nircam_Nseg[self.nircam_Nseg == i] = idx
                 idx+=1
 
+            
     
         self.Nseg = Nseg
     
@@ -519,6 +571,8 @@ class Sleuth(object):
 
                 valid &= rmask == 1
                 valid &= sci != 0
+                valid &= sci > -0.2
+                
                 valid &= (beam.spec['err'] > 0)
     
                 beam.spec["valid_mask"] = valid
@@ -533,6 +587,7 @@ class Sleuth(object):
         for pupil in self.obj.beams:
     
             flat_sci = []
+            flat_contam = []
             flat_err = []
             flat_mask = []
             mslices = []
@@ -543,10 +598,12 @@ class Sleuth(object):
                 beam.flat = {}
                 # flatten beam
                 beam.flat["sci"] = beam.spec["sci"].ravel()
+                beam.flat["contam"] = beam.spec["contam"].ravel()
                 beam.flat["err"]= beam.spec["err"].ravel()
                 beam.flat["mask"] = beam.mask.ravel()
                 
                 flat_sci.append(beam.flat["sci"])
+                flat_contam.append(beam.flat["contam"])
                 flat_err.append(beam.flat["err"])
                 flat_mask.append(beam.flat["mask"])
     
@@ -561,6 +618,7 @@ class Sleuth(object):
             # concatenate all beams in pupil
     
             self.flats[pupil] = {"sci":np.concatenate(flat_sci),
+                "contam":np.concatenate(flat_contam),
                 "err": np.concatenate(flat_err),
                 "mask": np.concatenate(flat_mask),
                 # "beam_id": np.array(beam_id),
@@ -573,6 +631,10 @@ class Sleuth(object):
 
         out = disperse_obj_cached(galaxy_image * (beam.direct['seg']>0), beam.spec['disp'],  beam.spec['sens'],
                           beam.spec['lam'], spectra, inimg)
+
+        if beam.corrected:
+            dx, dy, theta, amp = beam.spec['correction']
+            out = shift_rotate(np.asarray(out), dx=dx, dy=dy, theta_deg=theta)*amp
 
         ymin = np.max([l[0] - self.obj.pad,0])
         ymax = l[1] - self.obj.pad
@@ -615,6 +677,13 @@ class Sleuth(object):
         self.gen_mask()
         self.build_flats()
         
+        #remove_backgrounds
+        self.background_subtract_spec()
+        self.build_flats()
+
+        #correct trace
+        self.correct_trace()
+        
         #color segment
         self.prepare_segmentation()
         self.reset_seg()
@@ -628,7 +697,7 @@ class Sleuth(object):
     def extract_phot(self):
         self.phot = build_photometry([self.images[filt]['sci'] for filt in self.images],
                                      [self.images[filt]['err'] for filt in self.images],
-                                     self.obj.images['seg'],
+                                     self.nircam_Nseg,
                                      self.seg_ids,
                                     [filt for filt in self.images])
     
@@ -636,7 +705,7 @@ class Sleuth(object):
 
         flats = self.flats[pupil]
     
-        sci = flats["sci"]
+        sci = flats["sci"] - flats["contam"]
         err = flats["err"]
         mask = flats["mask"]
     
@@ -693,7 +762,7 @@ class Sleuth(object):
 
     def Fit_Beam(self, beam, temp, z, return_covar=False):
     
-        sci = beam.flat["sci"]
+        sci = beam.flat["sci"] - beam.flat["contam"]
         err = beam.flat["err"]
         mask = beam.flat["mask"]
     
@@ -782,7 +851,7 @@ class Sleuth(object):
     def ELMap_extract(self,pupil, tdict, specz, uselines, outfile, line_dir):
         build_line_maps(self, pupil, tdict, specz, uselines, outfile, line_dir)
         
-    def reconstruct_model(self, beam, coeffs, oktemp, temp, z):
+    def reconstruct_model(self, beam, coeffs, temp, z):
         """
         Reconstruct the best-fit dispersed model for a single beam.
     
@@ -806,57 +875,23 @@ class Sleuth(object):
         model = np.zeros_like(beam.spec["sci"], dtype=float)
     
         j = 0
-        k = 0
     
         for sid in self.seg_ids:
     
             seg = (beam.direct["seg"] == sid)
     
-            for name, template in temp[sid].items():
+            for name, spectrum in temp[sid].items():    
     
-                if oktemp[k]:
-    
-                    mdl = self.forward_model(beam,
-                        beam.direct["sci"] *(beam.direct["seg"] == sid),
-                        spectrum.redshift_spec(z))
-  
-                    model += coeffs[j] * mdl
-    
-                    j += 1
-    
-                k += 1
+                mdl = self.forward_model(beam,
+                    beam.direct["sci"] *(beam.direct["seg"] == sid),
+                    spectrum.redshift_spec(z))
+
+                model += coeffs[j] * mdl
+
+                j += 1
+
     
         return model
-
-def shift_rotate(image, dx, dy, angle_deg, order=3):
-    theta = np.deg2rad(angle_deg)
-    cos_t, sin_t = np.cos(theta), np.sin(theta)
-
-    rot_inv = np.array([[cos_t, sin_t],[-sin_t, cos_t]])
-
-    center = np.array(image.shape) / 2.0
-    offset = center - rot_inv @ center - np.array([dy, dx])
-
-    return affine_transform(image, rot_inv, offset=offset, order=order, mode='constant', cval=0.0, prefilter=(order > 1),)
-
-
-def asymmetric_loss(params, data, model, error,mask, lam=.01):
-
-    dx, dy, theta, amp = params
-
-    shifted_model = shift_rotate( model, dx=dx, dy=dy, angle_deg=theta)
-
-    residual = data - shifted_model*amp
-
-    # Weight by uncertainty
-    r = residual[mask] / error[mask]
-
-    # Penalize oversubtraction more strongly
-    loss = np.where(r >= 0, r**2, lam * r**2)
-
-    return np.sum(loss)
-
-
     
 class DispersionGeometry:
 
@@ -1033,3 +1068,5 @@ def fill_masked_covar(cov, mask):
     full[np.ix_(idx, idx)] = cov
 
     return full
+
+
