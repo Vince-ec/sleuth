@@ -1,3 +1,5 @@
+![Sleuth logo](assets/Sleuth_logo2.png)
+
 # Sleuth
 
 Sleuth is a Python package for forward-modeling and extracting spectra from
