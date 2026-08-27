@@ -1,4 +1,6 @@
-![Sleuth logo](assets/Sleuth_logo2.png)
+<p align="center">
+  <img src="assets/Sleuth_logo2.pngg" alt="Sleuth logo" width="300">
+</p>
 
 # Sleuth
 
