@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sleuth"
+version = "0.1.0"
+description = "Forward-modeling and spectral extraction for JWST NIRISS WFSS"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [
+    { name = "Vince Estrada-Carpenter", email = "you@example.com" }
+]
+dependencies = [
+    "numpy",
+    "scipy",
+    "astropy",
+    "h5py",
+    "jax",
+]
+
+[project.urls]
+Repository = "https://github.com/Vince-ec/sleuth"
+
+[tool.setuptools]
+packages = ["sleuth"]
