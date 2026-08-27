@@ -46,7 +46,9 @@ sleuth/                     <- repo root
 │   ├── blot_utils.py
 │   ├── oned.py
 │   ├── linemaps.py
-│   └── photometry.py
+│   ├── photometry.py
+│   ├── contam.py
+│   └── fitting_utils.py
 ├── pyproject.toml
 ├── README.md
 └── .gitignore
@@ -54,13 +56,15 @@ sleuth/                     <- repo root
 
 | Module | Purpose |
 |---|---|
-| `core.py` | `Sleuth` class — top-level driver: fitting, registration, loss functions |
+| `core.py` | `Sleuth` class — top-level driver: fitting, cleans images and beams|
 | `scene.py` | `Field`, `Galaxy` — scene/object containers, WCS handling, data I/O (`save_galaxy`, etc.) |
 | `templates.py` | Template construction: continuum templates, emission line templates, top-hat basis, template expansion |
 | `blot_utils.py` | Blotting/resampling of direct images and segmentation maps onto grism frames |
-| `oned.py` | `OneDExtraction` — 1D spectral extraction (integrated and per-region) |
+| `oned.py` | `OneDExtraction` — 1D spectral extraction (integrated and per-region) **experimental**|
 | `linemaps.py` | `build_line_maps` — 2D emission line map construction and HDF5 export |
 | `photometry.py` | Photometric utilities, e.g. converting imaging measurements into flux priors |
+| `contam.py` | Contamination utilities, locates and checks possible contaminating sources |
+| `fitting_utils.py` | Fitting utilities, checks and corrects for offsets during fitting |
 
 ## Installation
 
@@ -79,6 +83,7 @@ mode, so local changes to the source are picked up without reinstalling.
 - `astropy` (WCS, FITS I/O)
 - `h5py` (line map output)
 - `jax` / `jax.numpy` (used internally for parts of the fitting pipeline)
+- `grismagic` (utility to build trace models)
 
 <!-- TODO: confirm/expand this list, and pin versions if there are known
      compatibility constraints (e.g. a specific jax version). -->
