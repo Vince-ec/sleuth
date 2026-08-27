@@ -140,4 +140,4 @@ gx.save_galaxy("galaxies_out/")
 
 ## License
 
-<!-- TODO: add a LICENSE file and reference it here. -->
+MIT License — see [LICENSE](LICENSE) for details.
