@@ -7,10 +7,10 @@ name = "sleuth"
 version = "0.1.0"
 description = "Forward-modeling and spectral extraction for JWST NIRISS WFSS"
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.11"
 license = { text = "MIT" }
 authors = [
-    { name = "Vince Estrada-Carpenter", email = "you@example.com" }
+    { name = "Vince Estrada-Carpenter", email = "vestrad9@asu.edu" }
 ]
 dependencies = [
     "numpy",
@@ -18,6 +18,7 @@ dependencies = [
     "astropy",
     "h5py",
     "jax",
+    "grismagic",
 ]
 
 [project.urls]
