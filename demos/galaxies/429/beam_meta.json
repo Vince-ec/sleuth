@@ -1,0 +1,1064 @@
+{
+  "F115W": [
+    {
+      "filter": "GR150C",
+      "pupil": "F115W",
+      "gfile": "grism_files/jw01208026001_19101_00007_nis_columnjumpstep_rate.fits",
+      "dfile": "ref_files/MACS0417_f115.fits",
+      "exposure_number": 0,
+      "img_status": "good",
+      "corrected": true,
+      "cutout_limits": [
+        1762,
+        1822,
+        1480,
+        1621
+      ],
+      "validity": "valid",
+      "valid_region": [
+        800,
+        2848,
+        800,
+        2848
+      ]
+    },
+    {
+      "filter": "GR150C",
+      "pupil": "F115W",
+      "gfile": "grism_files/jw01208026001_19101_00004_nis_columnjumpstep_rate.fits",
+      "dfile": "ref_files/MACS0417_f115.fits",
+      "exposure_number": 5,
+      "img_status": "good",
+      "corrected": true,
+      "cutout_limits": [
+        1759,
+        1819,
+        1473,
+        1614
+      ],
+      "validity": "valid",
+      "valid_region": [
+        800,
+        2848,
+        800,
+        2848
+      ]
+    },
+    {
+      "filter": "GR150R",
+      "pupil": "F115W",
+      "gfile": "grism_files/jw01208028001_04101_00003_nis_columnjumpstep_rate.fits",
+      "dfile": "ref_files/MACS0417_f115.fits",
+      "exposure_number": 12,
+      "img_status": "good",
+      "corrected": true,
+      "cutout_limits": [
+        1691,
+        1833,
+        1540,
+        1600
+      ],
+      "validity": "valid",
+      "valid_region": [
+        800,
+        2848,
+        800,
+        2848
+      ]
+    },
+    {
+      "filter": "GR150C",
+      "pupil": "F115W",
+      "gfile": "grism_files/jw01208026001_19101_00002_nis_columnjumpstep_rate.fits",
+      "dfile": "ref_files/MACS0417_f115.fits",
+      "exposure_number": 13,
+      "img_status": "good",
+      "corrected": true,
+      "cutout_limits": [
+        1752,
+        1812,
+        1496,
+        1637
+      ],
+      "validity": "valid",
+      "valid_region": [
+        800,
+        2848,
+        800,
+        2848
+      ]
+    },
+    {
+      "filter": "GR150R",
+      "pupil": "F115W",
+      "gfile": "grism_files/jw01208027001_03101_00003_nis_columnjumpstep_rate.fits",
+      "dfile": "ref_files/MACS0417_f115.fits",
+      "exposure_number": 14,
+      "img_status": "good",
+      "corrected": true,
+      "cutout_limits": [
+        1693,
+        1835,
+        1544,
+        1604
+      ],
+      "validity": "valid",
+      "valid_region": [
+        800,
+        2848,
+        800,
+        2848
+      ]
+    },
+    {
+      "filter": "GR150C",
+      "pupil": "F115W",
+      "gfile": "grism_files/jw01208026001_19101_00001_nis_columnjumpstep_rate.fits",
+      "dfile": "ref_files/MACS0417_f115.fits",
+      "exposure_number": 18,
+      "img_status": "good",
+      "corrected": true,
+      "cutout_limits": [
+        1744,
+        1804,
+        1480,
+        1621
+      ],
+      "validity": "valid",
+      "valid_region": [
+        800,
+        2848,
+        800,
+        2848
+      ]
+    },
+    {
+      "filter": "GR150R",
+      "pupil": "F115W",
+      "gfile": "grism_files/jw01208028001_04101_00001_nis_columnjumpstep_rate.fits",
+      "dfile": "ref_files/MACS0417_f115.fits",
+      "exposure_number": 22,
+      "img_status": "good",
+      "corrected": true,
+      "cutout_limits": [
+        1669,
+        1811,
+        1532,
+        1592
+      ],
+      "validity": "valid",
+      "valid_region": [
+        800,
+        2848,
+        800,
+        2848
+      ]
+    },
+    {
+      "filter": "GR150R",
+      "pupil": "F115W",
+      "gfile": "grism_files/jw01208027001_03101_00002_nis_columnjumpstep_rate.fits",
+      "dfile": "ref_files/MACS0417_f115.fits",
+      "exposure_number": 25,
+      "img_status": "good",
+      "corrected": true,
+      "cutout_limits": [
+        1680,
+        1822,
+        1552,
+        1612
+      ],
+      "validity": "valid",
+      "valid_region": [
+        800,
+        2848,
+        800,
+        2848
+      ]
+    },
+    {
+      "filter": "GR150C",
+      "pupil": "F115W",
+      "gfile": "grism_files/jw01208026001_19101_00003_nis_columnjumpstep_rate.fits",
+      "dfile": "ref_files/MACS0417_f115.fits",
+      "exposure_number": 32,
+      "img_status": "good",
+      "corrected": true,
+      "cutout_limits": [
+        1766,
+        1826,
+        1488,
+        1629
+      ],
+      "validity": "valid",
+      "valid_region": [
+        800,
+        2848,
+        800,
+        2848
+      ]
+    },
+    {
+      "filter": "GR150R",
+      "pupil": "F115W",
+      "gfile": "grism_files/jw01208028001_04101_00002_nis_columnjumpstep_rate.fits",
+      "dfile": "ref_files/MACS0417_f115.fits",
+      "exposure_number": 33,
+      "img_status": "good",
+      "corrected": true,
+      "cutout_limits": [
+        1678,
+        1820,
+        1548,
+        1608
+      ],
+      "validity": "valid",
+      "valid_region": [
+        800,
+        2848,
+        800,
+        2848
+      ]
+    },
+    {
+      "filter": "GR150R",
+      "pupil": "F115W",
+      "gfile": "grism_files/jw01208027001_03101_00001_nis_columnjumpstep_rate.fits",
+      "dfile": "ref_files/MACS0417_f115.fits",
+      "exposure_number": 35,
+      "img_status": "good",
+      "corrected": true,
+      "cutout_limits": [
+        1671,
+        1813,
+        1536,
+        1596
+      ],
+      "validity": "valid",
+      "valid_region": [
+        800,
+        2848,
+        800,
+        2848
+      ]
+    },
+    {
+      "filter": "GR150R",
+      "pupil": "F115W",
+      "gfile": "grism_files/jw01208028001_04101_00004_nis_columnjumpstep_rate.fits",
+      "dfile": "ref_files/MACS0417_f115.fits",
+      "exposure_number": 41,
+      "img_status": "good",
+      "corrected": true,
+      "cutout_limits": [
+        1685,
+        1827,
+        1525,
+        1585
+      ],
+      "validity": "valid",
+      "valid_region": [
+        800,
+        2848,
+        800,
+        2848
+      ]
+    },
+    {
+      "filter": "GR150C",
+      "pupil": "F115W",
+      "gfile": "grism_files/jw01208026001_19101_00005_nis_columnjumpstep_rate.fits",
+      "dfile": "ref_files/MACS0417_f115.fits",
+      "exposure_number": 42,
+      "img_status": "good",
+      "corrected": true,
+      "cutout_limits": [
+        1740,
+        1800,
+        1472,
+        1613
+      ],
+      "validity": "valid",
+      "valid_region": [
+        800,
+        2848,
+        800,
+        2848
+      ]
+    },
+    {
+      "filter": "GR150R",
+      "pupil": "F115W",
+      "gfile": "grism_files/jw01208027001_03101_00004_nis_columnjumpstep_rate.fits",
+      "dfile": "ref_files/MACS0417_f115.fits",
+      "exposure_number": 43,
+      "img_status": "good",
+      "corrected": true,
+      "cutout_limits": [
+        1687,
+        1829,
+        1529,
+        1589
+      ],
+      "validity": "valid",
+      "valid_region": [
+        800,
+        2848,
+        800,
+        2848
+      ]
+    },
+    {
+      "filter": "GR150C",
+      "pupil": "F115W",
+      "gfile": "grism_files/jw01208026001_19101_00008_nis_columnjumpstep_rate.fits",
+      "dfile": "ref_files/MACS0417_f115.fits",
+      "exposure_number": 45,
+      "img_status": "good",
+      "corrected": true,
+      "cutout_limits": [
+        1756,
+        1816,
+        1465,
+        1606
+      ],
+      "validity": "valid",
+      "valid_region": [
+        800,
+        2848,
+        800,
+        2848
+      ]
+    },
+    {
+      "filter": "GR150C",
+      "pupil": "F115W",
+      "gfile": "grism_files/jw01208026001_19101_00006_nis_columnjumpstep_rate.fits",
+      "dfile": "ref_files/MACS0417_f115.fits",
+      "exposure_number": 46,
+      "img_status": "good",
+      "corrected": true,
+      "cutout_limits": [
+        1748,
+        1808,
+        1488,
+        1629
+      ],
+      "validity": "valid",
+      "valid_region": [
+        800,
+        2848,
+        800,
+        2848
+      ]
+    }
+  ],
+  "F200W": [
+    {
+      "filter": "GR150C",
+      "pupil": "F200W",
+      "gfile": "grism_files/jw01208026001_03101_00001_nis_columnjumpstep_rate.fits",
+      "dfile": "ref_files/MACS0417_f200.fits",
+      "exposure_number": 1,
+      "img_status": "good",
+      "corrected": true,
+      "cutout_limits": [
+        1745,
+        1805,
+        1267,
+        1475
+      ],
+      "validity": "valid",
+      "valid_region": [
+        800,
+        2848,
+        800,
+        2848
+      ]
+    },
+    {
+      "filter": "GR150R",
+      "pupil": "F200W",
+      "gfile": "grism_files/jw01208026001_07101_00001_nis_columnjumpstep_rate.fits",
+      "dfile": "ref_files/MACS0417_f200.fits",
+      "exposure_number": 2,
+      "img_status": "good",
+      "corrected": true,
+      "cutout_limits": [
+        1462,
+        1669,
+        1534,
+        1594
+      ],
+      "validity": "valid",
+      "valid_region": [
+        800,
+        2848,
+        800,
+        2848
+      ]
+    },
+    {
+      "filter": "GR150R",
+      "pupil": "F200W",
+      "gfile": "grism_files/jw01208026001_07101_00002_nis_columnjumpstep_rate.fits",
+      "dfile": "ref_files/MACS0417_f200.fits",
+      "exposure_number": 3,
+      "img_status": "good",
+      "corrected": true,
+      "cutout_limits": [
+        1471,
+        1678,
+        1550,
+        1610
+      ],
+      "validity": "valid",
+      "valid_region": [
+        800,
+        2848,
+        800,
+        2848
+      ]
+    },
+    {
+      "filter": "GR150C",
+      "pupil": "F200W",
+      "gfile": "grism_files/jw01208026001_03101_00002_nis_columnjumpstep_rate.fits",
+      "dfile": "ref_files/MACS0417_f200.fits",
+      "exposure_number": 7,
+      "img_status": "good",
+      "corrected": true,
+      "cutout_limits": [
+        1753,
+        1813,
+        1283,
+        1491
+      ],
+      "validity": "valid",
+      "valid_region": [
+        800,
+        2848,
+        800,
+        2848
+      ]
+    },
+    {
+      "filter": "GR150R",
+      "pupil": "F200W",
+      "gfile": "grism_files/jw01208026001_07101_00004_nis_columnjumpstep_rate.fits",
+      "dfile": "ref_files/MACS0417_f200.fits",
+      "exposure_number": 9,
+      "img_status": "good",
+      "corrected": true,
+      "cutout_limits": [
+        1478,
+        1685,
+        1527,
+        1587
+      ],
+      "validity": "valid",
+      "valid_region": [
+        800,
+        2848,
+        800,
+        2848
+      ]
+    },
+    {
+      "filter": "GR150C",
+      "pupil": "F200W",
+      "gfile": "grism_files/jw01208026001_03101_00004_nis_columnjumpstep_rate.fits",
+      "dfile": "ref_files/MACS0417_f200.fits",
+      "exposure_number": 10,
+      "img_status": "good",
+      "corrected": true,
+      "cutout_limits": [
+        1760,
+        1820,
+        1260,
+        1468
+      ],
+      "validity": "valid",
+      "valid_region": [
+        800,
+        2848,
+        800,
+        2848
+      ]
+    },
+    {
+      "filter": "GR150C",
+      "pupil": "F200W",
+      "gfile": "grism_files/jw01208026001_03101_00007_nis_columnjumpstep_rate.fits",
+      "dfile": "ref_files/MACS0417_f200.fits",
+      "exposure_number": 17,
+      "img_status": "good",
+      "corrected": true,
+      "cutout_limits": [
+        1763,
+        1823,
+        1267,
+        1475
+      ],
+      "validity": "valid",
+      "valid_region": [
+        800,
+        2848,
+        800,
+        2848
+      ]
+    },
+    {
+      "filter": "GR150R",
+      "pupil": "F200W",
+      "gfile": "grism_files/jw01208026001_07101_00007_nis_columnjumpstep_rate.fits",
+      "dfile": "ref_files/MACS0417_f200.fits",
+      "exposure_number": 19,
+      "img_status": "good",
+      "corrected": true,
+      "cutout_limits": [
+        1480,
+        1687,
+        1534,
+        1594
+      ],
+      "validity": "valid",
+      "valid_region": [
+        800,
+        2848,
+        800,
+        2848
+      ]
+    },
+    {
+      "filter": "GR150C",
+      "pupil": "F200W",
+      "gfile": "grism_files/jw01208026001_03101_00006_nis_columnjumpstep_rate.fits",
+      "dfile": "ref_files/MACS0417_f200.fits",
+      "exposure_number": 23,
+      "img_status": "good",
+      "corrected": true,
+      "cutout_limits": [
+        1749,
+        1809,
+        1275,
+        1483
+      ],
+      "validity": "valid",
+      "valid_region": [
+        800,
+        2848,
+        800,
+        2848
+      ]
+    },
+    {
+      "filter": "GR150C",
+      "pupil": "F200W",
+      "gfile": "grism_files/jw01208026001_03101_00008_nis_columnjumpstep_rate.fits",
+      "dfile": "ref_files/MACS0417_f200.fits",
+      "exposure_number": 24,
+      "img_status": "good",
+      "corrected": true,
+      "cutout_limits": [
+        1756,
+        1816,
+        1252,
+        1460
+      ],
+      "validity": "valid",
+      "valid_region": [
+        800,
+        2848,
+        800,
+        2848
+      ]
+    },
+    {
+      "filter": "GR150R",
+      "pupil": "F200W",
+      "gfile": "grism_files/jw01208026001_07101_00006_nis_columnjumpstep_rate.fits",
+      "dfile": "ref_files/MACS0417_f200.fits",
+      "exposure_number": 28,
+      "img_status": "good",
+      "corrected": true,
+      "cutout_limits": [
+        1467,
+        1674,
+        1542,
+        1602
+      ],
+      "validity": "valid",
+      "valid_region": [
+        800,
+        2848,
+        800,
+        2848
+      ]
+    },
+    {
+      "filter": "GR150R",
+      "pupil": "F200W",
+      "gfile": "grism_files/jw01208026001_07101_00008_nis_columnjumpstep_rate.fits",
+      "dfile": "ref_files/MACS0417_f200.fits",
+      "exposure_number": 29,
+      "img_status": "good",
+      "corrected": true,
+      "cutout_limits": [
+        1474,
+        1681,
+        1519,
+        1579
+      ],
+      "validity": "valid",
+      "valid_region": [
+        800,
+        2848,
+        800,
+        2848
+      ]
+    },
+    {
+      "filter": "GR150R",
+      "pupil": "F200W",
+      "gfile": "grism_files/jw01208026001_07101_00005_nis_columnjumpstep_rate.fits",
+      "dfile": "ref_files/MACS0417_f200.fits",
+      "exposure_number": 30,
+      "img_status": "good",
+      "corrected": true,
+      "cutout_limits": [
+        1458,
+        1665,
+        1526,
+        1586
+      ],
+      "validity": "valid",
+      "valid_region": [
+        800,
+        2848,
+        800,
+        2848
+      ]
+    },
+    {
+      "filter": "GR150C",
+      "pupil": "F200W",
+      "gfile": "grism_files/jw01208026001_03101_00005_nis_columnjumpstep_rate.fits",
+      "dfile": "ref_files/MACS0417_f200.fits",
+      "exposure_number": 36,
+      "img_status": "good",
+      "corrected": true,
+      "cutout_limits": [
+        1741,
+        1801,
+        1259,
+        1467
+      ],
+      "validity": "valid",
+      "valid_region": [
+        800,
+        2848,
+        800,
+        2848
+      ]
+    },
+    {
+      "filter": "GR150R",
+      "pupil": "F200W",
+      "gfile": "grism_files/jw01208026001_07101_00003_nis_columnjumpstep_rate.fits",
+      "dfile": "ref_files/MACS0417_f200.fits",
+      "exposure_number": 38,
+      "img_status": "good",
+      "corrected": true,
+      "cutout_limits": [
+        1484,
+        1691,
+        1542,
+        1602
+      ],
+      "validity": "valid",
+      "valid_region": [
+        800,
+        2848,
+        800,
+        2848
+      ]
+    },
+    {
+      "filter": "GR150C",
+      "pupil": "F200W",
+      "gfile": "grism_files/jw01208026001_03101_00003_nis_columnjumpstep_rate.fits",
+      "dfile": "ref_files/MACS0417_f200.fits",
+      "exposure_number": 39,
+      "img_status": "good",
+      "corrected": true,
+      "cutout_limits": [
+        1767,
+        1827,
+        1275,
+        1483
+      ],
+      "validity": "valid",
+      "valid_region": [
+        800,
+        2848,
+        800,
+        2848
+      ]
+    }
+  ],
+  "F150W": [
+    {
+      "filter": "GR150C",
+      "pupil": "F150W",
+      "gfile": "grism_files/jw01208026001_11101_00003_nis_columnjumpstep_rate.fits",
+      "dfile": "ref_files/MACS0417_f150.fits",
+      "exposure_number": 4,
+      "img_status": "good",
+      "corrected": true,
+      "cutout_limits": [
+        1766,
+        1826,
+        1402,
+        1569
+      ],
+      "validity": "valid",
+      "valid_region": [
+        800,
+        2848,
+        800,
+        2848
+      ]
+    },
+    {
+      "filter": "GR150R",
+      "pupil": "F150W",
+      "gfile": "grism_files/jw01208026001_15101_00003_nis_columnjumpstep_rate.fits",
+      "dfile": "ref_files/MACS0417_f150.fits",
+      "exposure_number": 6,
+      "img_status": "good",
+      "corrected": true,
+      "cutout_limits": [
+        1607,
+        1775,
+        1544,
+        1604
+      ],
+      "validity": "valid",
+      "valid_region": [
+        800,
+        2848,
+        800,
+        2848
+      ]
+    },
+    {
+      "filter": "GR150C",
+      "pupil": "F150W",
+      "gfile": "grism_files/jw01208026001_11101_00005_nis_columnjumpstep_rate.fits",
+      "dfile": "ref_files/MACS0417_f150.fits",
+      "exposure_number": 8,
+      "img_status": "good",
+      "corrected": true,
+      "cutout_limits": [
+        1740,
+        1800,
+        1386,
+        1553
+      ],
+      "validity": "valid",
+      "valid_region": [
+        800,
+        2848,
+        800,
+        2848
+      ]
+    },
+    {
+      "filter": "GR150R",
+      "pupil": "F150W",
+      "gfile": "grism_files/jw01208026001_15101_00005_nis_columnjumpstep_rate.fits",
+      "dfile": "ref_files/MACS0417_f150.fits",
+      "exposure_number": 11,
+      "img_status": "good",
+      "corrected": true,
+      "cutout_limits": [
+        1581,
+        1749,
+        1528,
+        1588
+      ],
+      "validity": "valid",
+      "valid_region": [
+        800,
+        2848,
+        800,
+        2848
+      ]
+    },
+    {
+      "filter": "GR150R",
+      "pupil": "F150W",
+      "gfile": "grism_files/jw01208026001_15101_00008_nis_columnjumpstep_rate.fits",
+      "dfile": "ref_files/MACS0417_f150.fits",
+      "exposure_number": 15,
+      "img_status": "good",
+      "corrected": true,
+      "cutout_limits": [
+        1597,
+        1765,
+        1521,
+        1581
+      ],
+      "validity": "valid",
+      "valid_region": [
+        800,
+        2848,
+        800,
+        2848
+      ]
+    },
+    {
+      "filter": "GR150R",
+      "pupil": "F150W",
+      "gfile": "grism_files/jw01208026001_15101_00006_nis_columnjumpstep_rate.fits",
+      "dfile": "ref_files/MACS0417_f150.fits",
+      "exposure_number": 16,
+      "img_status": "good",
+      "corrected": true,
+      "cutout_limits": [
+        1590,
+        1758,
+        1544,
+        1604
+      ],
+      "validity": "valid",
+      "valid_region": [
+        800,
+        2848,
+        800,
+        2848
+      ]
+    },
+    {
+      "filter": "GR150C",
+      "pupil": "F150W",
+      "gfile": "grism_files/jw01208026001_11101_00008_nis_columnjumpstep_rate.fits",
+      "dfile": "ref_files/MACS0417_f150.fits",
+      "exposure_number": 20,
+      "img_status": "good",
+      "corrected": true,
+      "cutout_limits": [
+        1755,
+        1815,
+        1379,
+        1546
+      ],
+      "validity": "valid",
+      "valid_region": [
+        800,
+        2848,
+        800,
+        2848
+      ]
+    },
+    {
+      "filter": "GR150C",
+      "pupil": "F150W",
+      "gfile": "grism_files/jw01208026001_11101_00006_nis_columnjumpstep_rate.fits",
+      "dfile": "ref_files/MACS0417_f150.fits",
+      "exposure_number": 21,
+      "img_status": "good",
+      "corrected": true,
+      "cutout_limits": [
+        1748,
+        1808,
+        1402,
+        1569
+      ],
+      "validity": "valid",
+      "valid_region": [
+        800,
+        2848,
+        800,
+        2848
+      ]
+    },
+    {
+      "filter": "GR150R",
+      "pupil": "F150W",
+      "gfile": "grism_files/jw01208026001_15101_00007_nis_columnjumpstep_rate.fits",
+      "dfile": "ref_files/MACS0417_f150.fits",
+      "exposure_number": 26,
+      "img_status": "good",
+      "corrected": true,
+      "cutout_limits": [
+        1603,
+        1771,
+        1536,
+        1596
+      ],
+      "validity": "valid",
+      "valid_region": [
+        800,
+        2848,
+        800,
+        2848
+      ]
+    },
+    {
+      "filter": "GR150C",
+      "pupil": "F150W",
+      "gfile": "grism_files/jw01208026001_11101_00007_nis_columnjumpstep_rate.fits",
+      "dfile": "ref_files/MACS0417_f150.fits",
+      "exposure_number": 27,
+      "img_status": "good",
+      "corrected": true,
+      "cutout_limits": [
+        1762,
+        1822,
+        1394,
+        1561
+      ],
+      "validity": "valid",
+      "valid_region": [
+        800,
+        2848,
+        800,
+        2848
+      ]
+    },
+    {
+      "filter": "GR150C",
+      "pupil": "F150W",
+      "gfile": "grism_files/jw01208026001_11101_00004_nis_columnjumpstep_rate.fits",
+      "dfile": "ref_files/MACS0417_f150.fits",
+      "exposure_number": 31,
+      "img_status": "good",
+      "corrected": true,
+      "cutout_limits": [
+        1759,
+        1819,
+        1387,
+        1554
+      ],
+      "validity": "valid",
+      "valid_region": [
+        800,
+        2848,
+        800,
+        2848
+      ]
+    },
+    {
+      "filter": "GR150R",
+      "pupil": "F150W",
+      "gfile": "grism_files/jw01208026001_15101_00004_nis_columnjumpstep_rate.fits",
+      "dfile": "ref_files/MACS0417_f150.fits",
+      "exposure_number": 34,
+      "img_status": "good",
+      "corrected": true,
+      "cutout_limits": [
+        1601,
+        1769,
+        1529,
+        1589
+      ],
+      "validity": "valid",
+      "valid_region": [
+        800,
+        2848,
+        800,
+        2848
+      ]
+    },
+    {
+      "filter": "GR150C",
+      "pupil": "F150W",
+      "gfile": "grism_files/jw01208026001_11101_00002_nis_columnjumpstep_rate.fits",
+      "dfile": "ref_files/MACS0417_f150.fits",
+      "exposure_number": 37,
+      "img_status": "good",
+      "corrected": true,
+      "cutout_limits": [
+        1752,
+        1812,
+        1410,
+        1577
+      ],
+      "validity": "valid",
+      "valid_region": [
+        800,
+        2848,
+        800,
+        2848
+      ]
+    },
+    {
+      "filter": "GR150R",
+      "pupil": "F150W",
+      "gfile": "grism_files/jw01208026001_15101_00002_nis_columnjumpstep_rate.fits",
+      "dfile": "ref_files/MACS0417_f150.fits",
+      "exposure_number": 40,
+      "img_status": "good",
+      "corrected": true,
+      "cutout_limits": [
+        1594,
+        1762,
+        1552,
+        1612
+      ],
+      "validity": "valid",
+      "valid_region": [
+        800,
+        2848,
+        800,
+        2848
+      ]
+    },
+    {
+      "filter": "GR150R",
+      "pupil": "F150W",
+      "gfile": "grism_files/jw01208026001_15101_00001_nis_columnjumpstep_rate.fits",
+      "dfile": "ref_files/MACS0417_f150.fits",
+      "exposure_number": 44,
+      "img_status": "good",
+      "corrected": true,
+      "cutout_limits": [
+        1585,
+        1753,
+        1536,
+        1596
+      ],
+      "validity": "valid",
+      "valid_region": [
+        800,
+        2848,
+        800,
+        2848
+      ]
+    },
+    {
+      "filter": "GR150C",
+      "pupil": "F150W",
+      "gfile": "grism_files/jw01208026001_11101_00001_nis_columnjumpstep_rate.fits",
+      "dfile": "ref_files/MACS0417_f150.fits",
+      "exposure_number": 47,
+      "img_status": "good",
+      "corrected": true,
+      "cutout_limits": [
+        1744,
+        1804,
+        1394,
+        1561
+      ],
+      "validity": "valid",
+      "valid_region": [
+        800,
+        2848,
+        800,
+        2848
+      ]
+    }
+  ]
+}
