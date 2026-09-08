@@ -747,7 +747,7 @@ def build_line_maps(gx, pupil, tdict, specz, uselines, outfile, line_dir, pixsca
 
         mdl = gx.reconstruct_model(MB, full_coeffs, tdict, specz)
         
-        if not MB.corrected:
+        if not MB.meta['corrected']:
             result = minimize(asymmetric_loss, x0=[0, 0, 0,1],args=(MB.spec['sci'] - MB.spec['contam'], mdl, 
                     MB.spec['err'], MB.mask),method='Powell',
                     bounds=[(-2, 2),(-2, 2),(-1, 1),(0.9, 1.1)],
@@ -761,7 +761,7 @@ def build_line_maps(gx, pupil, tdict, specz, uselines, outfile, line_dir, pixsca
             full_model = np.reshape(Cx @ template_matrix, np.shape(mdl))
             line_wave_obs = line_dict[line]*(1+specz)
 
-            if not MB.corrected:
+            if not MB.meta['corrected']:
                 full_model = shift_rotate( np.asarray(full_model), dx=dx, dy=dy, theta_deg=theta)*amp
 
             # sliced_templates = mask_slice_templates(gx,MB,templates, line_wave_obs, specz)

@@ -105,7 +105,7 @@ class Sleuth(object):
                 
                 dx, dy, theta, amp = result.x
                 MB.spec['correction'] = (dx,dy,theta, amp)
-                MB.corrected = True
+                MB.meta['corrected'] = True
               
     def prepare_foward_model(self, chunk_size = 20):
 
@@ -632,7 +632,7 @@ class Sleuth(object):
         out = disperse_obj_cached(galaxy_image * (beam.direct['seg']>0), beam.spec['disp'],  beam.spec['sens'],
                           beam.spec['lam'], spectra, inimg)
 
-        if beam.corrected:
+        if beam.meta['corrected']:
             dx, dy, theta, amp = beam.spec['correction']
             out = shift_rotate(np.asarray(out), dx=dx, dy=dy, theta_deg=theta)*amp
 

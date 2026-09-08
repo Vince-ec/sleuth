@@ -33,7 +33,7 @@ class Field(object):
     Loads all exposures, calibration information, and the source catalog.
     """
 
-    def __init__(self, grism_files, ref_files, cal_dir, cat, seg, contam_files, img_dir=None, pad = 800):
+    def __init__(self, grism_files, ref_files, cal_dir, cat, seg, contam_files=None, img_dir=None, pad = 800):
 
         self.grism_files = grism_files
         self.ref_files = ref_files
@@ -333,7 +333,7 @@ class Field(object):
         
         print(f"Saved to {outdir}/")
 
-def load_field(outdir, contam_dir):
+def load_field(outdir, contam_dir=None):
     field = Field.__new__(Field)   # skip __init__
 
     # ── metadata ──────────────────────────────────────────────────────────
@@ -390,13 +390,27 @@ def load_field(outdir, contam_dir):
         field.imgdict = json.load(f)
     
     # ── contam ─────────────────────────────────────────────────
-    if contam_dir != None:
+    if contam_dir == None:
+        field.contam = {}
+
+        field.trace_corrections = False
+        field.correction_table = {'F115W': {'+1':{}, '0':{}, '+2':{}, '+3':{}, '-1':{}},
+                                'F150W': {'+1':{}, '0':{}, '+2':{}, '+3':{}, '-1':{}},
+                                'F200W': {'+1':{}, '0':{}, '+2':{}, '+3':{}, '-1':{}}}
+        
+        for exp in field.exposures:
+            if not exp["pupil"] in field.contam:
+                field.contam[exp["pupil"]] = {}
+                
+            field.contam[exp['pupil']][exp['gfile']] = np.zeros_like(exp["direct"])
+
+    else:
         with open(os.path.join(contam_files, 'contam.pkl'), 'rb') as f:
             field.contam = pickle.load(f)
         
         with open(os.path.join(contam_files, 'correction_table.pkl'), 'rb') as f:
             field.correction_table = pickle.load(f)
-        
+    
     return field
 
     
@@ -446,8 +460,8 @@ class Galaxy(object):
         # -------------------------
         if self.field.img_dir != None:
 
-            seg = fits.open(self.field.imgdict['seg']['file'])[0].data
-            seg_wcs = wcs.WCS(fits.open(self.field.imgdict['seg']['file'])[0].header)
+            seg = fits.open(self.imgdict['seg']['file'])[0].data
+            seg_wcs = wcs.WCS(fits.open(self.imgdict['seg']['file'])[0].header)
             
             pos = np.where(seg == self.gid )
             
@@ -462,10 +476,10 @@ class Galaxy(object):
             self.images["seg"] = img 
             self.images["seg_wcs"] = nwcs
             
-            for filt in self.field.imgdict['imgs']:
+            for filt in self.imgdict['imgs']:
                 self.images[filt] = {}
             
-                dat = fits.open(self.field.imgdict['imgs'][filt]['file'])
+                dat = fits.open(self.imgdict['imgs'][filt]['file'])
                 
                 (img,nwcs,x,y) = self.cutout_img_NC(wcs.WCS(dat[0].header), dat[0].data, size = size)
             
@@ -473,7 +487,7 @@ class Galaxy(object):
                 self.images[filt]["wcs"] = nwcs
                 self.images[filt]["pivot"] = dat[0].header['PHOTPLAM']
 
-                dat = fits.open(self.field.imgdict['err'][filt]['file'])
+                dat = fits.open(self.imgdict['err'][filt]['file'])
                 
                 (img,nwcs,x,y) = self.cutout_img_NC(wcs.WCS(dat[0].header), dat[0].data, size = size)
             
@@ -504,7 +518,7 @@ class Galaxy(object):
             fraction = mask.mean()
             
             if fraction < 0.9:     
-                dat = fits.open(self.field.imgdict['imgs'][exp['pupil']]['file'])
+                dat = fits.open(self.imgdict['imgs'][exp['pupil']]['file'])
                 outwcs = wcs.WCS(dat[0].header)
                 outwcs.pscale = 1
                 
@@ -517,7 +531,7 @@ class Galaxy(object):
                 fraction = mask.mean()
 
                 if fraction < 0.9:     
-                    dat = fits.open(self.field.imgdict['imgs'][self.substitute_filter]['file'])
+                    dat = fits.open(self.imgdict['imgs'][self.substitute_filter]['file'])
                     outwcs = wcs.WCS(dat[0].header)
                     outwcs.pscale = 1
                     
@@ -562,7 +576,7 @@ class Galaxy(object):
             key = (exp['filter'], exp['pupil'], self.order)
             beam.meta["sens"] = self.field.sensitivity[key]
 
-            beam.corrected = False
+            beam.meta["corrected"] = False
             
             # -------------------------
             # Find spectral cutout limits
@@ -598,7 +612,8 @@ class Galaxy(object):
             beam.spec["x_trace"], beam.spec["y_trace"], beam.spec["lam"] = beam.meta["trace"].get_trace(beam.direct["npx"], beam.direct["npy"], self.order)
             beam.spec["dlam"] = np.abs(jnp.gradient(beam.spec["lam"] * 1e4))
             beam.spec["sens"] = jnp.interp(beam.spec["lam"], np.ravel(beam.meta['sens'][0]), np.ravel(beam.meta['sens'][1])) * beam.spec["dlam"]
-
+            beam.spec["correction"] = [0, 0, 0, 0]
+            
             # -------------------------
             # Contam
             # -------------------------
@@ -772,7 +787,7 @@ class Galaxy(object):
                     for section, datasets in [
                         ("direct", ["sci", "seg"]),
                         ("spec",   ["sci", "err", "x_trace", "y_trace",
-                                    "lam", "dlam", "sens", "contam"]),
+                                    "lam", "dlam", "sens", "contam", "correction"]),
                     ]:
                         sgrp = grp.create_group(section)
                         for k in datasets:
@@ -790,10 +805,10 @@ class Galaxy(object):
                         "direct": beam.direct["wcs"],
                         "spec":   beam.spec["wcs"],
                     })
-    
+                    
                     # ── metadata ──────────────────────────────────────────────
                     bm = {k: beam.meta[k]
-                          for k in ("filter", "pupil", "gfile", "dfile", "exposure_number")}
+                          for k in ("filter", "pupil", "gfile", "dfile", "exposure_number", "img_status", "exposure_number", "corrected")}
                     bm["cutout_limits"] = beam.cutout_limits
                     bm["validity"]      = beam.validity
                     bm["valid_region"]  = beam.valid_region.tolist()
@@ -887,14 +902,14 @@ def load_galaxy(outdir):
                 beam.direct["wcs"] = bw["direct"]
 
                 for k in ("sci", "err", "x_trace", "y_trace",
-                          "lam", "dlam", "sens", "contam"):
+                          "lam", "dlam", "sens", "contam","correction"):
                     if k in grp["spec"]:
                         beam.spec[k] = grp["spec"][k][:]
                 beam.spec["wcs"] = bw["spec"]
 
                 # ── metadata ──────────────────────────────────────────────
                 beam.meta.update({k: bm[k]
-                                  for k in ("filter", "pupil", "gfile", "dfile", "exposure_number")})
+                                  for k in ("filter", "pupil", "gfile", "dfile", "exposure_number", "img_status", "exposure_number", "corrected")})
                 beam.meta["trace"] = bt
                 beam.meta["sens"]  = (np.array(bs["wave"]), np.array(bs["sens"]))
 
