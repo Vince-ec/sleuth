@@ -69,7 +69,7 @@ class Sleuth(object):
             self.bkgs[p] = {}
             
             for bid, b in enumerate(self.obj.beams[p]):
-                d = b.spec['sci']
+                d = b.spec['sci'] - b.spec['contam']
                 d[np.isnan(d)] = 0
             
                 unique_values, counts = np.unique(d, return_counts=True)
@@ -848,8 +848,8 @@ class Sleuth(object):
     def OneD(self, pupils):
         self.OneD_int, self.OneD_reg = OneDExtraction(self, pupils)    
 
-    def ELMap_extract(self,pupil, tdict, specz, uselines, outfile, line_dir):
-        build_line_maps(self, pupil, tdict, specz, uselines, outfile, line_dir)
+    def ELMap_extract(self,pupil, tdict, specz, uselines, outfile, line_dir, pixscale):
+        build_line_maps(self, pupil, tdict, specz, uselines, outfile, line_dir, pixscale = pixscale)
         
     def reconstruct_model(self, beam, coeffs, temp, z):
         """
