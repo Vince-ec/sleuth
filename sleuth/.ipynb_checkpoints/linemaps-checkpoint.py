@@ -424,6 +424,8 @@ def ELM_extract(gx, beam, model, line_wave_obs, pixfrac=1.0,kernel="gaussian", s
     
     return {"map":line, "weight":weight, "wcs" : output_wcs}
 
+
+    
 def combine_line_maps(gx, maps, line, line_wave_obs, z, pixscale,
                       kernel, sigma_clip=True):
     """
@@ -780,6 +782,61 @@ def build_line_maps(gx, pupil, tdict, specz, uselines, outfile, line_dir, pixsca
         MAPS[line] = combine_line_maps(gx,maps, line, line_wave_obs,specz, pixscale=pixscale, kernel='point')
     
     save_sleuth_maps(outfile, gx, MAPS, uselines, specz)
+
+def build_line_maps_refs(gx, pupil, tdict, specz, uselines, outfile, line_dir, pixscale = 0.06):
+    ldict = line_templates(list(line_dict.keys()),line_dir)
+
+    maps = {line: {} for line in uselines}    
+
+        
+    for beam_id,filt in enumerate(gx.ref_beams[pupil]):
+        MB = gx.ref_beams[pupil][filt]
+        chi2, design_matrix, coeffs, active  = gx.Fit_Beam(MB, tdict, specz) 
+                
+        full_coeffs = np.zeros(active.size)
+        full_coeffs[active] = coeffs
+        
+        templates, ex_coeff, OK, names = expand_templates(tdict, full_coeffs, active, ldict)
+        
+        template_matrix = build_model_matrix(gx, MB, templates, specz)
+
+        mdl = gx.reconstruct_model(MB, full_coeffs, tdict, specz)
+        
+        if not MB.meta['corrected']:
+            result = minimize(asymmetric_loss, x0=[0, 0, 0,1],args=(MB.spec['sci'] - MB.spec['contam'], mdl, 
+                    MB.spec['err'], MB.mask),method='Powell',
+                    bounds=[(-2, 2),(-2, 2),(-1, 1),(0.9, 1.1)],
+                    options={'xtol': 1e-5, 'ftol': 1e-5, 'maxiter': 1000, 'disp': False,})
+            
+            dx, dy, theta, amp = result.x
+
+        for line in uselines:
+            Cx = set_line_to_zero(ex_coeff, names, line)
+            # full_model = evaluate_model_matrix(,np.shape(MB.mask), MB.mask, Cx)
+            full_model = np.reshape(Cx @ template_matrix, np.shape(mdl))
+            line_wave_obs = line_dict[line]*(1+specz)
+
+            if not MB.meta['corrected']:
+                full_model = shift_rotate( np.asarray(full_model), dx=dx, dy=dy, theta_deg=theta)*amp
+
+            # sliced_templates = mask_slice_templates(gx,MB,templates, line_wave_obs, specz)
+            
+            # sliced_template_matrix = build_model_matrix(gx, MB, sliced_templates, 0)
+            
+            # slice_model = evaluate_model_matrix(sliced_template_matrix,np.shape(MB.mask), MB.mask, Cx)
+    
+            maps[line][beam_id] ={"line" : ELM_extract(gx, MB, full_model, line_wave_obs),  
+                "slice" : ELM_extract(gx, MB, full_model, line_wave_obs)   }  # fix slice
+
+    MAPS = {}
+    for line in uselines:
+        line_wave_obs = line_dict[line]*(1+specz)
+        
+        MAPS[line] = combine_line_maps(gx,maps, line, line_wave_obs,specz, pixscale=pixscale, kernel='point')
+    
+    save_sleuth_maps(outfile, gx, MAPS, uselines, specz)
+
+
 
 def load_sleuth_maps(filename, obj_id=None, lines=None):
     """

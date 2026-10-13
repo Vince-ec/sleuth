@@ -12,7 +12,7 @@ from .blot_utils import blot_segmentation, blot_direct_image
 from .photometry import build_photometry
 from .templates import Grism_template
 from .oned import OneDExtraction
-from .linemaps import build_line_maps
+from .linemaps import build_line_maps, build_line_maps_refs
 from .fitting_utils import asymmetric_loss, shift_rotate
 
 import jax.numpy as jnp
@@ -94,19 +94,43 @@ class Sleuth(object):
                 mdl = self.forward_model(MB,MB.direct['sci'], [MB.spec['lam']*1e4, 
                         flux*np.ones_like(MB.spec['lam'])/total_flux])
                 
-                maxamp = 1.1
+                maxamp = 1.3
                 if self.obj.order == '0':
                     maxamp = 2.0
                 
                 result = minimize(asymmetric_loss, x0=[0, 0, 0,1],args=(MB.spec['sci'], mdl, 
                         MB.spec['err'], MB.mask),method='Powell',
-                        bounds=[(-2, 2),(-2, 2),(-1, 1),(0.9, maxamp)],
+                        bounds=[(-3, 3),(-3, 3),(-1, 1),(0.7, maxamp)],
+                        options={'xtol': 1e-5, 'ftol': 1e-5, 'maxiter': 1000, 'disp': False,})
+                
+                dx, dy, theta, amp = result.x
+                MB.spec['correction'] = (dx,dy,theta, amp)
+                MB.meta['corrected'] = True
+
+    def correct_ref_trace(self):        
+        for pupil in self.ref_beams:
+            for filt in self.ref_beams[pupil]:
+                MB = self.ref_beams[pupil][filt]
+                flux = np.sum(self.images[pupil]['sci'][self.obj.images['seg'] > 0])
+                total_flux = np.sum(MB.direct['sci'][MB.direct['seg']>0])
+                
+                mdl = self.forward_model(MB,MB.direct['sci'], [MB.spec['lam']*1e4, 
+                        flux*np.ones_like(MB.spec['lam'])/total_flux])
+                
+                maxamp = 1.3
+                if self.obj.order == '0':
+                    maxamp = 2.0
+                
+                result = minimize(asymmetric_loss, x0=[0, 0, 0,1],args=(MB.spec['sci'], mdl, 
+                        MB.spec['err'], MB.mask),method='Powell',
+                        bounds=[(-1.5, 1.5),(-1.5, 1.5),(-1, 1),(0.7, maxamp)],
                         options={'xtol': 1e-5, 'ftol': 1e-5, 'maxiter': 1000, 'disp': False,})
                 
                 dx, dy, theta, amp = result.x
                 MB.spec['correction'] = (dx,dy,theta, amp)
                 MB.meta['corrected'] = True
               
+        
     def prepare_foward_model(self, chunk_size = 20):
 
         for p in self.obj.beams:
@@ -624,6 +648,49 @@ class Sleuth(object):
                 # "beam_id": np.array(beam_id),
                 "mslices":mslices}
 
+    def build_ref_flats(self):
+        self.ref_flats = {}
+        for pupil in self.obj.beams:
+    
+            flat_sci = []
+            flat_contam = []
+            flat_err = []
+            flat_mask = []
+            mslices = []
+            # beam_id = []
+
+            s = 0
+            for i, filt in enumerate(self.ref_beams[pupil]):
+                beam = self.ref_beams[pupil][filt]
+                beam.flat = {}
+                # flatten beam
+                beam.flat["sci"] = beam.spec["sci"].ravel()
+                beam.flat["contam"] = beam.spec["contam"].ravel()
+                beam.flat["err"]= beam.spec["err"].ravel()
+                beam.flat["mask"] = beam.mask.ravel()
+                
+                flat_sci.append(beam.flat["sci"])
+                flat_contam.append(beam.flat["contam"])
+                flat_err.append(beam.flat["err"])
+                flat_mask.append(beam.flat["mask"])
+    
+                # beam_id.extend(np.ones(sci.size,dtype=int) * i)
+                
+                # -----------------------------------
+                # generate mslices
+                # -----------------------------------
+                
+                mslices.append(np.arange(s, s+np.sum(beam.flat["mask"] > 0)))
+                s += np.sum(beam.flat["mask"] > 0)
+            # concatenate all beams in pupil
+    
+            self.ref_flats[pupil] = {"sci":np.concatenate(flat_sci),
+                "contam":np.concatenate(flat_contam),
+                "err": np.concatenate(flat_err),
+                "mask": np.concatenate(flat_mask),
+                # "beam_id": np.array(beam_id),
+                "mslices":mslices}
+        
     def forward_model(self,beam, galaxy_image, spectra):   
         l = beam.cutout_limits
 
@@ -632,16 +699,16 @@ class Sleuth(object):
         out = disperse_obj_cached(galaxy_image * (beam.direct['seg']>0), beam.spec['disp'],  beam.spec['sens'],
                           beam.spec['lam'], spectra, inimg)
 
-        if beam.meta['corrected']:
-            dx, dy, theta, amp = beam.spec['correction']
-            out = shift_rotate(np.asarray(out), dx=dx, dy=dy, theta_deg=theta)*amp
-
         ymin = np.max([l[0] - self.obj.pad,0])
         ymax = l[1] - self.obj.pad
         xmin = np.max([l[2] - self.obj.pad,0])
         xmax = l[3] - self.obj.pad
                 
         out_=  out[ymin:ymax, xmin:xmax]
+        
+        if beam.meta['corrected']:
+            dx, dy, theta, amp = beam.spec['correction']
+            out_ = shift_rotate(np.asarray(out_), dx=dx, dy=dy, theta_deg=theta)*amp
 
         if beam.validity == 'valid':
             return out_
@@ -693,6 +760,135 @@ class Sleuth(object):
         
         #get phot
         self.extract_phot()
+
+    def Stack_spectra(self):
+        # from sleuth.blot_utils import blot_direct_image, blot_segmentation
+
+        pairs = {(p, b.meta['filter'])
+            for p in self.obj.beams
+            for b in self.obj.beams[p]}
+        
+        ref_beams = {}
+        ref_bids = {}
+        bstk = {}
+        estk = {}
+        bmask = {}
+        stacked_spec = {}
+        stacked_error = {}
+        valid_mask = {}
+        
+        for p, filt in pairs:
+            ref_beams.setdefault(p, {})[filt] = None
+            ref_bids.setdefault(p, {})[filt] = None
+        
+            bstk.setdefault(p, {})[filt] = []
+            estk.setdefault(p, {})[filt] = []
+            bmask.setdefault(p, {})[filt] = []
+        
+            stacked_spec.setdefault(p, {})[filt] = None
+            stacked_error.setdefault(p, {})[filt] = None
+            valid_mask.setdefault(p, {})[filt] = None
+        
+        
+        #create_refs
+        for p in self.obj.beams:
+            GR150C = False
+            GR150R = False
+            for bid, b in enumerate(self.obj.beams[p]):
+                
+                if b.meta['filter'] == 'GR150C' and not GR150C:
+                    b.spec['wcs'].wcs.cd = b.spec['wcs'].wcs.pc
+                    b.spec['wcs'].pscale = 1
+                    ref_beams[p]['GR150C'] = b
+                    ref_bids[p]['GR150C'] = bid
+                    GR150C = True
+                
+                if b.meta['filter'] == 'GR150R' and not GR150R:
+                    b.spec['wcs'].wcs.cd = b.spec['wcs'].wcs.pc
+                    b.spec['wcs'].pscale = 1
+                    ref_beams[p]['GR150R'] = b
+                    ref_bids[p]['GR150R'] = bid
+                    GR150R = True
+        
+        #blot images
+        for p in self.obj.beams:
+            for b in self.obj.beams[p]:
+                b.spec['wcs'].wcs.cd = b.spec['wcs'].wcs.pc
+                b.spec['wcs'].pscale = 1
+        
+                ospec = b.spec['sci'] - b.spec['contam']
+                
+                bspec = blot_direct_image(np.array(ospec).astype(np.float32),
+                                         b.spec['wcs'],
+                                         ref_beams[p][b.meta['filter']].spec['wcs'])
+                
+                bstk[p][b.meta['filter']].append(bspec/np.nansum(bspec)*np.nansum(ospec))
+        
+                oerror = b.spec['err']
+        
+                variance = oerror#**2
+                
+                bvariance = blot_direct_image(
+                    np.asarray(variance, dtype=np.float32),
+                    b.spec['wcs'],
+                    ref_beams[p][b.meta['filter']].spec['wcs'])
+                
+                # berror = np.sqrt(bvariance)
+                berror = bvariance
+        
+                estk[p][b.meta['filter']].append(berror/np.nansum(berror)*np.nansum(oerror))
+        
+                omask = b.spec['valid_mask']
+                
+                bmask_ = blot_segmentation(np.array(omask).astype(np.float32),
+                                         b.spec['wcs'],
+                                         ref_beams[p][b.meta['filter']].spec['wcs'],
+                                         np.shape(omask))
+                
+                bmask[p][b.meta['filter']].append(bmask_)
+        
+        #stack
+        for p in stacked_spec:
+            for filt in stacked_spec[p]:
+        
+                specs = np.asarray(bstk[p][filt])
+                errors = np.asarray(estk[p][filt])
+                masks = np.asarray(bmask[p][filt])
+        
+                valid = ((masks == 1) &
+                    np.isfinite(specs) &
+                    np.isfinite(errors))
+        
+                masked_specs = np.where(valid, specs, np.nan)
+                masked_errors = np.where(valid, errors, np.nan)
+        
+                # Median stack
+                out = np.nanmedian(masked_specs, axis=0)
+        
+                # Median propagated error
+                err = np.nanmedian(masked_errors, axis=0)
+        
+                # At least one valid spectrum
+                mask = np.any(valid, axis=0)
+        
+                # Pixels with no valid spectra
+                out[~mask] = 0
+                err[~mask] = 0
+        
+                stacked_spec[p][filt] = out
+                stacked_error[p][filt] = err
+                valid_mask[p][filt] = mask.astype(int)
+        
+        #set refs
+        self.ref_beams = ref_beams
+        self.ref_bids = ref_bids
+        
+        for p in self.ref_beams :
+            for filt in self.ref_beams[p]:
+                self.ref_beams[p][filt].spec['sci'] = stacked_spec[p][filt]
+                self.ref_beams[p][filt].spec['err'] = stacked_error[p][filt]
+                self.ref_beams[p][filt].mask = (valid_mask[p][filt] & self.ref_beams[p][filt].spec['trace_mask']) == 1
+        
     
     def extract_phot(self):
         self.phot = build_photometry([self.images[filt]['sci'] for filt in self.images],
@@ -759,7 +955,52 @@ class Sleuth(object):
     
         return (chi2 / Nbeam,A_spec,coeffs,oktemp)
     
+    def Fit_Ref(self, pupil, temp, z, return_covar=False):
 
+        flats = self.ref_flats[pupil]
+    
+        sci = flats["sci"] - flats["contam"]
+        err = flats["err"]
+        mask = flats["mask"]
+
+        beams = self.ref_beams[pupil]
+        
+        Nbeam = len(beams)
+        Npix = np.sum(mask)
+        
+        # --------------------------------------------------
+        # Spectral templates
+        # --------------------------------------------------
+    
+        rows = []
+    
+        for sid in self.seg_ids:    
+            for name, spectrum in temp[sid].items():
+    
+                dispersed = []
+    
+                for filt in beams:
+                    beam = beams[filt]
+                    mdl = self.forward_model(beam,
+                        beam.direct["sci"] *(beam.direct["seg"] == sid),
+                        spectrum.redshift_spec(z))
+    
+                    dispersed.append(mdl.ravel())
+    
+                rows.append(np.concatenate(dispersed)[mask])
+    
+        A = np.asarray(rows)
+        
+        if return_covar:
+    
+            chi2, coeffs, model, oktemp, covar = self._fit_matrix(A,sci,err,mask,return_covar=True,pedestal=0,)
+    
+            return (chi2 / Nbeam, A,coeffs,oktemp,covar,)
+    
+        chi2, coeffs, model, oktemp = self._fit_matrix(A,sci,err,mask,pedestal=pedestal,)
+    
+        return (chi2 / Nbeam, A,coeffs,oktemp)
+    
     def Fit_Beam(self, beam, temp, z, return_covar=False):
     
         sci = beam.flat["sci"] - beam.flat["contam"]
@@ -850,7 +1091,12 @@ class Sleuth(object):
 
     def ELMap_extract(self,pupil, tdict, specz, uselines, outfile, line_dir, pixscale):
         build_line_maps(self, pupil, tdict, specz, uselines, outfile, line_dir, pixscale = pixscale)
+
+
+    def ELMap_extract_REFS(self,pupil, tdict, specz, uselines, outfile, line_dir, pixscale):
+        build_line_maps_refs(self, pupil, tdict, specz, uselines, outfile, line_dir, pixscale = pixscale)
         
+    
     def reconstruct_model(self, beam, coeffs, temp, z):
         """
         Reconstruct the best-fit dispersed model for a single beam.
